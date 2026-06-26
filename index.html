@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notas Fiscais · US Vale Verde</title>
+  <meta name="description" content="Notas Fiscais de transporte/frete da operação — séries temporais de valor, peso e quantidade, por produto e origem. US Vale Verde.">
+  <link rel="preconnect" href="https://docs.google.com">
+  <link rel="stylesheet" href="./styles.css?v=1">
+</head>
+<body>
+  <header class="topbar">
+    <img class="topbar__logo" src="./assets/enaex-logo-white.png" alt="ENAEX">
+    <span class="topbar__title">Notas Fiscais</span>
+    <span class="topbar__unit">US VALE VERDE</span>
+  </header>
+
+  <main class="page">
+    <section class="page-head">
+      <div class="page-head__title">
+        <p class="eyebrow">NOTAS FISCAIS · TRANSPORTE / FRETE</p>
+        <h1>Notas Fiscais de Frete</h1>
+      </div>
+      <div class="filters">
+        <label class="filter">
+          <span>ANO</span>
+          <select id="filter-year"></select>
+        </label>
+        <label class="filter">
+          <span>MÊS</span>
+          <select id="filter-month"></select>
+        </label>
+        <label class="filter filter--wide">
+          <span>ORIGEM</span>
+          <select id="filter-origin"></select>
+        </label>
+        <label class="filter filter--wide">
+          <span>PRODUTO</span>
+          <select id="filter-product"></select>
+        </label>
+        <button id="filter-reset" type="button" class="filter-reset">Limpar</button>
+      </div>
+    </section>
+
+    <p class="status" id="status" aria-live="polite">
+      <span class="status__dot" id="status-dot"></span>
+      <span id="status-text">Carregando…</span>
+      <span class="status__spacer"></span>
+      <span class="status__time" id="last-update"></span>
+    </p>
+
+    <div class="active-filters" id="active-filters" style="display:none"></div>
+
+    <section class="kpis" id="kpis">
+      <div class="kpi">
+        <p class="kpi__label">NOTAS FISCAIS</p>
+        <p class="kpi__value" id="kpi-count">—</p>
+        <p class="kpi__sub" id="kpi-count-hint">&nbsp;</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi__label">VALOR DO FRETE</p>
+        <p class="kpi__value" id="kpi-frete">—</p>
+        <p class="kpi__sub" id="kpi-frete-hint">Custo de transporte total</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi__label">VALOR TOTAL DAS NFs</p>
+        <p class="kpi__value" id="kpi-total">—</p>
+        <p class="kpi__sub" id="kpi-total-hint">Produtos + frete</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi__label">FRETE MÉDIO POR NF</p>
+        <p class="kpi__value" id="kpi-ticket">—</p>
+        <p class="kpi__sub" id="kpi-ticket-hint">Ticket médio no filtro</p>
+      </div>
+    </section>
+
+    <section class="chart-stack">
+      <div class="chart-block">
+        <div class="chart-block__head">
+          <h2>Evolução mensal — Valor do Frete e Valor Total das NFs</h2>
+          <p>Soma mensal em R$ · clique na legenda para isolar uma série</p>
+        </div>
+        <div class="chart-block__body chart-block__body--tall"><canvas id="chart-value"></canvas></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Nº de NFs emitidas por mês</h2>
+            <p>Quantidade de notas no filtro</p>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-count"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Quantidade transportada por mês</h2>
+            <p>Soma de Qtde (unidades variam: KG · PC · M)</p>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-qty"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Valor do frete por produto</h2>
+            <p>Top produtos por soma do frete (R$)</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-frete-prod"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Nº de NFs por produto</h2>
+            <p>Top produtos por quantidade de notas</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-count-prod"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Comparação por origem</h2>
+            <p>Escada-PE × Quatro Barras-PR — frete e nº de NFs</p>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-origin"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Frete médio por NF ao longo do tempo</h2>
+            <p>Valor médio do frete por nota, por mês (R$)</p>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-ticket"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="extra-section">
+      <div class="extra-section__head">
+        <h2>Séries por produto — evolução mensal do frete</h2>
+        <p>Top produtos por valor de frete · valor médio mensal (R$)</p>
+      </div>
+      <div id="extra-charts" class="extra-grid"></div>
+    </section>
+
+    <section class="table-section">
+      <div class="table-section__head">
+        <div>
+          <h2>Notas fiscais — detalhamento</h2>
+          <p>Ordenável por coluna · use a busca para filtrar por nº, produto, origem ou destinatário</p>
+        </div>
+        <label class="search-box">
+          <span>Buscar</span>
+          <input id="table-search" type="text" placeholder="Ex.: 22743, Emulsão, Escada…" autocomplete="off">
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table class="nf-table" id="nf-table">
+          <thead>
+            <tr>
+              <th data-key="date">Emissão <span class="sort-ind"></span></th>
+              <th data-key="nf">NF <span class="sort-ind"></span></th>
+              <th data-key="product">Produto <span class="sort-ind"></span></th>
+              <th data-key="route">Rota <span class="sort-ind"></span></th>
+              <th data-key="qty" class="is-num">Qtde <span class="sort-ind"></span></th>
+              <th data-key="frete" class="is-num">Frete <span class="sort-ind"></span></th>
+              <th data-key="total" class="is-num">Valor Total NF <span class="sort-ind"></span></th>
+            </tr>
+          </thead>
+          <tbody id="nf-tbody"></tbody>
+        </table>
+      </div>
+      <div class="table-foot">
+        <span id="table-info">—</span>
+        <div class="pager" id="pager"></div>
+      </div>
+    </section>
+
+    <p class="source-note">
+      <strong>Fonte:</strong> planilha de Notas Fiscais da US Vale Verde (357 NFs, jul/2024–jun/2026), lida em tempo real via Google Sheets (API gviz) — atualiza a cada acesso, sem servidor nem build.
+      Valores monetários em reais (R$); formato pt-BR. <strong>Valor do Frete</strong> reflete 311 NFs com frete preenchido;
+      <strong>Valor Total NF</strong> inclui produtos + frete. <strong>Quantidade</strong> é expressa na unidade da nota (KG, peças — PC, ou metros — M), por isso o somatório cruza unidades distintas e deve ser lido por produto.
+      Origens: Escada-PE e Quatro Barras-PR → destino único Craíbas-AL. Colunas <em>Status</em>, <em>Conferente</em> e <em>Divergências</em> estão vazias na base atual.
+    </p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="./app.js?v=1"></script>
+</body>
+</html>
