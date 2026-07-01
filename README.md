@@ -1,6 +1,6 @@
-# Notas Fiscais · US Vale Verde
+# Notas Fiscais - US Vale Verde
 
-Dashboard interativo das **Notas Fiscais de transporte/frete** da operação —
+Dashboard interativo das **Notas Fiscais - US Vale Verde** da operação —
 séries temporais de valor do frete, valor total das NFs, quantidade transportada
 e número de notas, com recortes por **produto** e por **origem**, KPIs financeiros
 e tabela detalhada com busca, ordenação e paginação.

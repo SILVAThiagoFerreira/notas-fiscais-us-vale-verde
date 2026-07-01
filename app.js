@@ -1,5 +1,5 @@
 /* =====================================================================
-   Notas Fiscais de Frete — US Vale Verde
+   Notas Fiscais - US Vale Verde
    Lê em tempo real a planilha Google Sheets (gviz) e renderiza os gráficos.
    Atualiza a cada acesso — sem servidor, sem build.
 
