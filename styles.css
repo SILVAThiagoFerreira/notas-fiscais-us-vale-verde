@@ -305,6 +305,23 @@ body {
   font-size: 10.5px;
   color: var(--muted);
 }
+
+/* ---------- Blastbags section ---------- */
+.blastbags-section {
+  margin-top: 12px;
+}
+.blastbags-section__head { margin-bottom: 12px; }
+.blastbags-section__head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.blastbags-section__head p {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  color: var(--muted);
+}
 .extra-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));

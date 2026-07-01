@@ -6,7 +6,7 @@
   <title>Notas Fiscais - US Vale Verde</title>
   <meta name="description" content="Notas Fiscais - US Vale Verde: séries temporais de valor do frete, valor total das NFs, quantidade e origem da operação.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=1">
+  <link rel="stylesheet" href="./styles.css?v=2">
 </head>
 <body>
   <header class="topbar">
@@ -143,6 +143,40 @@
       <div id="extra-charts" class="extra-grid"></div>
     </section>
 
+    <section class="blastbags-section" id="blastbags-section">
+      <div class="blastbags-section__head">
+        <div>
+          <h2>Blastbags</h2>
+          <p id="blastbags-meta">Recorte dos produtos BLASTBAG da planilha.</p>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Quantidade por Blastbag</h2>
+            <p>Somatório de Qtde por produto</p>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-blastbag-qty"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Valor unitário por Blastbag</h2>
+            <p>Média do valor unitário por produto</p>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-blastbag-vunit"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-block">
+        <div class="chart-block__head">
+          <h2>Valor total dos produtos por Blastbag</h2>
+          <p>Soma do valor total dos produtos por item</p>
+        </div>
+        <div class="chart-block__body chart-block__body--tall"><canvas id="chart-blastbag-vprod"></canvas></div>
+      </div>
+    </section>
+
     <section class="table-section">
       <div class="table-section__head">
         <div>
@@ -185,6 +219,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="./app.js?v=1"></script>
+  <script src="./app.js?v=2"></script>
 </body>
 </html>

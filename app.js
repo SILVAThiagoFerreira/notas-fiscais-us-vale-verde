@@ -63,6 +63,7 @@ let RECORDS = [];
 let CHARTS = {};
 let STATE = { sortKey: "date", sortDir: "desc", page: 1, search: "" };
 const PAGE_SIZE = 15;
+const BLASTBAG_TOKEN = "BLASTBAG";
 
 /* ===================== Carregamento ===================== */
 async function loadSheet() {
@@ -306,6 +307,7 @@ function render() {
   renderOrigin(data);
   renderTicket(data);
   renderProductSeries(data);
+  renderBlastbags(data);
   renderTable(data);
   updateActiveFilters();
 }
@@ -435,6 +437,16 @@ function topProducts(data, metricFn, limit) {
     .slice(0, limit);
 }
 
+function productGroups(data, predicate = () => true) {
+  const groups = {};
+  data.filter(predicate).forEach((r) => {
+    (groups[r.produto] = groups[r.produto] || []).push(r);
+  });
+  return Object.entries(groups)
+    .map(([p, arr]) => ({ p, arr }))
+    .sort((a, b) => a.p.localeCompare(b.p, "pt-BR"));
+}
+
 function renderFreteByProduct(data) {
   const entries = topProducts(data, (arr) => sum(arr.map((r) => r.vfrete || 0)), 12);
   buildChart("chart-frete-prod", "bar", {
@@ -556,6 +568,82 @@ function renderProductSeries(data) {
         },
       },
     });
+  });
+}
+
+function renderBlastbags(data) {
+  const section = document.getElementById("blastbags-section");
+  if (!section) return;
+
+  const subset = data.filter((r) => norm(r.produto).includes(BLASTBAG_TOKEN));
+  if (!subset.length) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  const meta = document.getElementById("blastbags-meta");
+  const dates = subset.map((r) => r.date).sort((a, b) => a - b);
+  const products = [...new Set(subset.map((r) => r.produto))];
+  if (meta && dates.length) {
+    meta.textContent =
+      `${fmtInt(subset.length)} NFs · ${fmtInt(products.length)} produtos · ` +
+      `${fmtDate(dates[0])} a ${fmtDate(dates[dates.length - 1])} · ` +
+      `${subset[0].origem} → ${subset[0].destino}`;
+  }
+
+  const entries = productGroups(subset);
+  renderBlastbagBar("chart-blastbag-qty", entries, {
+    label: "Qtde",
+    axisTitle: "Qtde total",
+    color: C.blue,
+    value: (arr) => sum(arr.map((r) => r.qty || 0)),
+    tooltip: (value, entry) => `${fmtNum(value, 0)} unidades · ${fmtInt(entry.arr.length)} NF${entry.arr.length === 1 ? "" : "s"}`,
+    compactAxis: false,
+  });
+  renderBlastbagBar("chart-blastbag-vunit", entries, {
+    label: "Valor unitário (R$)",
+    axisTitle: "Valor unitário (R$)",
+    color: C.green,
+    value: (arr) => mean(arr.map((r) => r.vunit || 0)),
+    tooltip: (value, entry) => `${fmtBRL(value)} · ${fmtInt(entry.arr.length)} NF${entry.arr.length === 1 ? "" : "s"}`,
+    compactAxis: true,
+  });
+  renderBlastbagBar("chart-blastbag-vprod", entries, {
+    label: "Valor total dos produtos (R$)",
+    axisTitle: "Valor total dos produtos (R$)",
+    color: C.neutral,
+    value: (arr) => sum(arr.map((r) => r.vprod || 0)),
+    tooltip: (value, entry) => `${fmtBRL(value)} · ${fmtInt(entry.arr.length)} NF${entry.arr.length === 1 ? "" : "s"}`,
+    compactAxis: true,
+  });
+}
+
+function renderBlastbagBar(canvasId, entries, cfg) {
+  buildChart(canvasId, "bar", {
+    type: "bar",
+    data: {
+      labels: entries.map((e) => e.p),
+      datasets: [{ label: cfg.label, data: entries.map((e) => cfg.value(e.arr)), backgroundColor: cfg.color, borderRadius: 2 }],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: tooltipCfg({
+          callbacks: {
+            label: (it) => cfg.tooltip(it.parsed.x, entries[it.dataIndex]),
+          },
+        }),
+      },
+      scales: {
+        x: scaleY(cfg.axisTitle, cfg.compactAxis),
+        y: { ...scaleTicks(), grid: { display: false } },
+      },
+    },
   });
 }
 
