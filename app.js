@@ -713,12 +713,12 @@ function renderBlastbagBar(canvasId, entries, cfg) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
-      layout: { padding: { right: 78 } },
+      layout: { padding: { right: 24 } },
       plugins: {
         legend: { display: false },
         blastbagValueLabels: {
           formatter: (value, dataIndex) => cfg.valueLabel(value, ranked[dataIndex], total),
-          color: C.ink,
+          color: cfg.color,
         },
         tooltip: tooltipCfg({
           callbacks: {
@@ -731,7 +731,19 @@ function renderBlastbagBar(canvasId, entries, cfg) {
           ...scaleY(cfg.axisTitle, cfg.compactAxis),
           suggestedMax: Math.max(...ranked.map((e) => e.chartValue), 0) * 1.15,
         },
-        y: { ...scaleTicks(), grid: { display: false }, ticks: { color: C.text, font: { size: 8 }, autoSkip: false } },
+        y: {
+          ...scaleTicks(),
+          grid: { display: false },
+          ticks: {
+            color: C.text,
+            font: { size: 8 },
+            autoSkip: false,
+            callback: (_value, index) => {
+              const label = ranked[index] ? ranked[index].p : "";
+              return label.length > 24 ? label.slice(0, 24) + "…" : label;
+            },
+          },
+        },
       },
     },
   });
@@ -874,18 +886,28 @@ const blastbagValueLabelsPlugin = {
     const meta = chart.getDatasetMeta(0);
     const dataset = chart.data.datasets[0];
     if (!meta || meta.hidden || !dataset) return;
-    const { ctx, chartArea } = chart;
+    const { ctx } = chart;
     ctx.save();
-    ctx.fillStyle = opts.color || C.ink;
-    ctx.font = "700 10px " + Chart.defaults.font.family;
-    ctx.textAlign = "left";
+    ctx.font = "700 9px " + Chart.defaults.font.family;
     ctx.textBaseline = "middle";
     meta.data.forEach((bar, i) => {
       const value = dataset.data[i];
       if (value == null) return;
       const label = opts.formatter ? opts.formatter(value, i) : fmtNum(value, 0);
-      const x = Math.min(bar.x + 8, chartArea.right + 72);
-      ctx.fillText(label, x, bar.y);
+      const barWidth = bar.width || 0;
+      const textWidth = ctx.measureText(label).width;
+      if (barWidth < 44) return;
+      if (barWidth >= textWidth + 18) {
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "right";
+        ctx.fillText(label, bar.x - 8, bar.y);
+        return;
+      }
+      if (barWidth >= textWidth + 8) {
+        ctx.fillStyle = opts.color || C.ink;
+        ctx.textAlign = "right";
+        ctx.fillText(label, bar.x - 6, bar.y);
+      }
     });
     ctx.restore();
   },
