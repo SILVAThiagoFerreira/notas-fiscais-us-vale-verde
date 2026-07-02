@@ -58,6 +58,17 @@ function monthKey(r) { return r.ano + "-" + String(r.mes).padStart(2, "0"); }
 function monthLabel(k) { const [y, m] = k.split("-"); return meses[+m - 1] + "/" + y.slice(2); }
 function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
 function sum(arr) { return arr.reduce((a, b) => a + (b || 0), 0); }
+function weightedMean(rows, valueKey, weightKey) {
+  let total = 0, weight = 0;
+  rows.forEach((r) => {
+    const value = r[valueKey], w = r[weightKey];
+    if (value != null && w != null && w > 0) {
+      total += value * w;
+      weight += w;
+    }
+  });
+  return weight ? total / weight : mean(rows.map((r) => r[valueKey]).filter((v) => v != null));
+}
 
 let RECORDS = [];
 let CHARTS = {};
@@ -586,65 +597,154 @@ function renderBlastbags(data) {
   const dates = subset.map((r) => r.date).sort((a, b) => a - b);
   const products = [...new Set(subset.map((r) => r.produto))];
   if (meta && dates.length) {
+    const totalQty = sum(subset.map((r) => r.qty || 0));
+    const totalProducts = sum(subset.map((r) => r.vprod || 0));
     meta.textContent =
       `${fmtInt(subset.length)} NFs · ${fmtInt(products.length)} produtos · ` +
       `${fmtDate(dates[0])} a ${fmtDate(dates[dates.length - 1])} · ` +
-      `${subset[0].origem} → ${subset[0].destino}`;
+      `${fmtNum(totalQty, 0)} un. · ${fmtBRLcompact(totalProducts)} em produtos`;
   }
 
-  const entries = productGroups(subset);
+  const entries = productGroups(subset).map((entry) => {
+    const qty = sum(entry.arr.map((r) => r.qty || 0));
+    const vprod = sum(entry.arr.map((r) => r.vprod || 0));
+    return {
+      ...entry,
+      qty,
+      vprod,
+      nfs: entry.arr.length,
+      vunit: weightedMean(entry.arr, "vunit", "qty"),
+      firstDate: entry.arr.map((r) => r.date).sort((a, b) => a - b)[0],
+      lastDate: entry.arr.map((r) => r.date).sort((a, b) => b - a)[0],
+    };
+  });
+
+  renderBlastbagKpis(subset, entries);
+
   renderBlastbagBar("chart-blastbag-qty", entries, {
     label: "Qtde",
     axisTitle: "Qtde total",
     color: C.blue,
-    value: (arr) => sum(arr.map((r) => r.qty || 0)),
-    tooltip: (value, entry) => `${fmtNum(value, 0)} unidades · ${fmtInt(entry.arr.length)} NF${entry.arr.length === 1 ? "" : "s"}`,
+    value: (entry) => entry.qty,
+    rankBy: "qty",
+    valueLabel: (value) => fmtNum(value, 0),
+    tooltip: (value, entry) => [
+      `${fmtNum(value, 0)} unidades`,
+      `${fmtInt(entry.nfs)} NF${entry.nfs === 1 ? "" : "s"} · ${fmtBRLcompact(entry.vprod)} em produtos`,
+      `Período: ${fmtDate(entry.firstDate)} a ${fmtDate(entry.lastDate)}`,
+    ],
     compactAxis: false,
   });
   renderBlastbagBar("chart-blastbag-vunit", entries, {
-    label: "Valor unitário (R$)",
-    axisTitle: "Valor unitário (R$)",
+    label: "Valor unitário ponderado (R$)",
+    axisTitle: "R$ por unidade",
     color: C.green,
-    value: (arr) => mean(arr.map((r) => r.vunit || 0)),
-    tooltip: (value, entry) => `${fmtBRL(value)} · ${fmtInt(entry.arr.length)} NF${entry.arr.length === 1 ? "" : "s"}`,
+    value: (entry) => entry.vunit,
+    rankBy: "vunit",
+    valueLabel: (value) => fmtBRLcompact(value),
+    tooltip: (value, entry) => [
+      `${fmtBRL(value)} por unidade`,
+      `Ponderado por ${fmtNum(entry.qty, 0)} unidades`,
+      `${fmtInt(entry.nfs)} NF${entry.nfs === 1 ? "" : "s"} no filtro`,
+    ],
     compactAxis: true,
   });
   renderBlastbagBar("chart-blastbag-vprod", entries, {
     label: "Valor total dos produtos (R$)",
     axisTitle: "Valor total dos produtos (R$)",
     color: C.neutral,
-    value: (arr) => sum(arr.map((r) => r.vprod || 0)),
-    tooltip: (value, entry) => `${fmtBRL(value)} · ${fmtInt(entry.arr.length)} NF${entry.arr.length === 1 ? "" : "s"}`,
+    value: (entry) => entry.vprod,
+    rankBy: "vprod",
+    valueLabel: (value, entry, total) => `${fmtBRLcompact(value)} · ${fmtNum(total ? value / total * 100 : 0, 1)}%`,
+    tooltip: (value, entry, total) => [
+      `${fmtBRL(value)} em produtos`,
+      `${fmtNum(total ? value / total * 100 : 0, 1)}% do valor Blastbag`,
+      `${fmtNum(entry.qty, 0)} unidades · ${fmtInt(entry.nfs)} NF${entry.nfs === 1 ? "" : "s"}`,
+    ],
     compactAxis: true,
   });
 }
 
+function renderBlastbagKpis(subset, entries) {
+  const box = document.getElementById("blastbag-kpis");
+  if (!box) return;
+  const totalQty = sum(entries.map((e) => e.qty));
+  const totalProducts = sum(entries.map((e) => e.vprod));
+  const leader = [...entries].sort((a, b) => b.vprod - a.vprod)[0];
+  const leaderShare = leader && totalProducts ? leader.vprod / totalProducts * 100 : 0;
+  const cards = [
+    { label: "NFs Blastbag", value: fmtInt(subset.length), hint: `${fmtInt(entries.length)} produtos no filtro` },
+    { label: "Quantidade", value: fmtNum(totalQty, 0), hint: "Soma de unidades Blastbag" },
+    { label: "Valor produtos", value: fmtBRLcompact(totalProducts), hint: `Ticket médio ${fmtBRLcompact(subset.length ? totalProducts / subset.length : 0)}/NF` },
+    { label: "Maior participação", value: leader ? `${fmtNum(leaderShare, 1)}%` : "—", hint: leader ? leader.p : "Sem produto" },
+  ];
+  box.innerHTML = cards.map((card) =>
+    `<div class="blastbag-kpi">` +
+    `<p class="blastbag-kpi__label">${escapeText(card.label)}</p>` +
+    `<p class="blastbag-kpi__value">${escapeText(card.value)}</p>` +
+    `<p class="blastbag-kpi__hint">${escapeText(card.hint)}</p>` +
+    `</div>`
+  ).join("");
+}
+
 function renderBlastbagBar(canvasId, entries, cfg) {
+  const ranked = [...entries]
+    .map((entry) => ({ ...entry, chartValue: cfg.value(entry) || 0 }))
+    .sort((a, b) => b.chartValue - a.chartValue);
+  const total = sum(ranked.map((e) => e.chartValue));
   buildChart(canvasId, "bar", {
     type: "bar",
     data: {
-      labels: entries.map((e) => e.p),
-      datasets: [{ label: cfg.label, data: entries.map((e) => cfg.value(e.arr)), backgroundColor: cfg.color, borderRadius: 2 }],
+      labels: ranked.map((e) => e.p),
+      datasets: [{
+        label: cfg.label,
+        data: ranked.map((e) => e.chartValue),
+        backgroundColor: (ctx) => barGradient(ctx, cfg.color),
+        borderColor: cfg.color,
+        borderWidth: 1,
+        borderRadius: 3,
+        borderSkipped: false,
+        barPercentage: 0.78,
+        categoryPercentage: 0.72,
+      }],
     },
     options: {
       indexAxis: "y",
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
+      layout: { padding: { right: 78 } },
       plugins: {
         legend: { display: false },
+        blastbagValueLabels: {
+          formatter: (value, dataIndex) => cfg.valueLabel(value, ranked[dataIndex], total),
+          color: C.ink,
+        },
         tooltip: tooltipCfg({
           callbacks: {
-            label: (it) => cfg.tooltip(it.parsed.x, entries[it.dataIndex]),
+            label: (it) => cfg.tooltip(it.parsed.x, ranked[it.dataIndex], total),
           },
         }),
       },
       scales: {
-        x: scaleY(cfg.axisTitle, cfg.compactAxis),
-        y: { ...scaleTicks(), grid: { display: false } },
+        x: {
+          ...scaleY(cfg.axisTitle, cfg.compactAxis),
+          suggestedMax: Math.max(...ranked.map((e) => e.chartValue), 0) * 1.15,
+        },
+        y: { ...scaleTicks(), grid: { display: false }, ticks: { color: C.text, font: { size: 8 }, autoSkip: false } },
       },
     },
   });
+}
+
+function barGradient(ctx, color) {
+  const chart = ctx.chart;
+  const area = chart.chartArea;
+  if (!area) return color;
+  const gradient = chart.ctx.createLinearGradient(area.left, 0, area.right, 0);
+  gradient.addColorStop(0, color + "cc");
+  gradient.addColorStop(1, color);
+  return gradient;
 }
 
 /* ===================== Tabela ===================== */
@@ -768,6 +868,29 @@ function scaleY(title, compact) {
   };
 }
 
+const blastbagValueLabelsPlugin = {
+  id: "blastbagValueLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    const meta = chart.getDatasetMeta(0);
+    const dataset = chart.data.datasets[0];
+    if (!meta || meta.hidden || !dataset) return;
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.fillStyle = opts.color || C.ink;
+    ctx.font = "700 10px " + Chart.defaults.font.family;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    meta.data.forEach((bar, i) => {
+      const value = dataset.data[i];
+      if (value == null) return;
+      const label = opts.formatter ? opts.formatter(value, i) : fmtNum(value, 0);
+      const x = Math.min(bar.x + 8, chartArea.right + 72);
+      ctx.fillText(label, x, bar.y);
+    });
+    ctx.restore();
+  },
+};
+
 function setStatus(kind, text) {
   const el = document.getElementById("status");
   if (!el) return;
@@ -790,6 +913,7 @@ document.addEventListener("DOMContentLoaded", () => {
   Chart.defaults.color = "#6c747b";
   Chart.defaults.borderColor = "rgba(56,66,75,0.08)";
   Object.assign(Chart.defaults.plugins.tooltip, tooltipBase());
+  Chart.register(blastbagValueLabelsPlugin);
 
   // ordenação ao clicar no cabeçalho
   document.querySelectorAll(".nf-table thead th").forEach((th) => {
