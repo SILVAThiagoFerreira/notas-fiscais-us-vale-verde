@@ -37,16 +37,45 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---------- Topbar (logo only, sem faixa escura) ---------- */
+/* ---------- Topbar (padrão Enaex: faixa escura, logo branco, filete vermelho) ---------- */
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 22px 0 0;
-  background: transparent;
+  height: 54px;
+  padding: 0 32px 0 44px;
+  background: #38424B;
+  border-bottom: 4px solid #E20613;
+  color: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
-.topbar__logo { height: 26px; width: auto; filter: brightness(0) opacity(.85); }
-.topbar__title,
-.topbar__unit { display: none; }
+.topbar__logo { height: 28px; width: auto; display: block; }
+.topbar__title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  white-space: nowrap;
+}
+.topbar__unit {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.58);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .topbar { height: 50px; padding: 0 16px; }
+  .topbar__logo { height: 22px; }
+  .topbar__title { font-size: 16px; }
+  .topbar__unit { font-size: 8px; }
+}
 
 /* ---------- Page ---------- */
 .page {
@@ -497,7 +526,7 @@ body {
 @media print {
   body { background: #fff; font-size: 11px; }
   .page { width: 100%; padding: 0; }
-  .topbar { padding: 0 0 8px; }
+  .topbar { height: 44px; padding: 0 24px; margin-bottom: 12px; }
   .filters, .filter-reset, .status, .active-filters,
   .table-section__head .search-box, .pager, .table-foot { display: none !important; }
   .page-head { margin-bottom: 12px; }
