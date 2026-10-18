@@ -15,18 +15,19 @@ const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?form
 
 /* Paleta do hub + cores para os produtos */
 const C = {
-  ink: "#38424B",
-  inkFill: "rgba(56,66,75,0.12)",
-  neutral: "#E20613",
-  grid: "rgba(56,66,75,0.08)",
-  text: "#6c747b",
+  ink: "#3C3F44",
+  inkFill: "rgba(60,63,68,0.12)",
+  neutral: "#B5121B",
+  grid: "rgba(0,0,0,0)",
+  axis: "#C4C7CC",
+  text: "#8A8F96",
   blue: "#1f6feb",
   purple: "#6f42c1",
   green: "#107c10",
   amber: "#c47b00",
 };
 const PRODUCT_COLORS = [
-  "#E20613", "#38424B", "#1f6feb", "#6f42c1", "#107c10", "#c47b00",
+  "#B5121B", "#3C3F44", "#1f6feb", "#6f42c1", "#107c10", "#c47b00",
   "#0d8a8a", "#b9387a", "#5a6c00", "#7a4b11", "#2c5f8d", "#8a2c2c",
 ];
 
@@ -50,6 +51,15 @@ const fmtBRLcompact = (n) => {
   if (a >= 1e6) return "R$ " + dec2.format(n / 1e6) + " mi";
   if (a >= 1e3) return "R$ " + dec2.format(n / 1e3) + " mil";
   return "R$ " + dec2.format(n);
+};
+
+/** Versão compacta para quantidades (sem R$): 2,50 mi / 500 mil */
+const fmtQtyCompact = (n) => {
+  if (n == null || !isFinite(n)) return "—";
+  const a = Math.abs(n);
+  if (a >= 1e6) return dec2.format(n / 1e6) + " mi";
+  if (a >= 1e3) return dec2.format(n / 1e3) + " mil";
+  return dec2.format(n);
 };
 
 const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -382,9 +392,9 @@ function renderValue(data) {
       labels: months.map((m) => monthLabel(m.k)),
       datasets: [
         { label: "Valor do Frete (R$)", data: freteByMonth, yAxisID: "y",
-          borderColor: C.neutral, backgroundColor: "rgba(226,6,19,0.12)", borderWidth: 2.2, pointRadius: 2.5, tension: 0.3, fill: true },
+          borderColor: C.neutral, backgroundColor: "rgba(181,18,27,0.12)", borderWidth: 2.2, pointRadius: 2.5, tension: 0.3, fill: true },
         { label: "Valor Total NF (R$)", data: totalByMonth, yAxisID: "y1",
-          borderColor: C.ink, backgroundColor: "rgba(56,66,75,0.06)", borderWidth: 1.8, borderDash: [5, 3], pointRadius: 1.5, tension: 0.3, fill: false },
+          borderColor: C.ink, backgroundColor: "rgba(60,63,68,0.06)", borderWidth: 1.8, borderDash: [5, 3], pointRadius: 1.5, tension: 0.3, fill: false },
       ],
     },
     options: {
@@ -395,11 +405,11 @@ function renderValue(data) {
         tooltip: tooltipCfg({ callbacks: { label: (it) => `${it.dataset.label}: ${fmtBRL(it.parsed.y)}` } }),
       },
       scales: {
-        x: { ticks: { color: C.text, font: { size: 8 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.grid } },
+        x: { ticks: { color: C.text, font: { size: 8 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
         y: { position: "left", title: { display: true, text: "Valor do Frete (R$)", color: C.neutral, font: { size: 9, weight: "bold" } },
-             ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.grid } },
+             ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.axis } },
         y1: { position: "right", title: { display: true, text: "Valor Total NF (R$)", color: C.ink, font: { size: 9, weight: "bold" } },
-              ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { drawOnChartArea: false }, border: { color: C.grid } },
+              ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { drawOnChartArea: false }, border: { color: C.axis } },
       },
     },
   });
@@ -416,7 +426,7 @@ function renderCount(data) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtInt(it.parsed.y)} NFs` } }) },
-      scales: { x: { ticks: { color: C.text, font: { size: 7 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.grid } },
+      scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
                 y: scaleY("Nº de NFs") },
     },
   });
@@ -428,13 +438,13 @@ function renderQty(data) {
     type: "bar",
     data: {
       labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Quantidade", data: months.map((m) => sum(m.vals.map((r) => r.qty || 0))), backgroundColor: C.blue, borderRadius: 2 }],
+      datasets: [{ label: "Quantidade", data: months.map((m) => sum(m.vals.map((r) => r.qty || 0))), backgroundColor: "#8A8F96", borderRadius: 2 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtNum(it.parsed.y, 0)} unidades (KG·PC·M)` } }) },
-      scales: { x: { ticks: { color: C.text, font: { size: 7 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.grid } },
-                y: scaleY("Qtde (unidades)", true) },
+      scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
+                y: { ...scaleY("Qtde (unidades)"), ticks: { color: C.text, font: { size: 10 }, callback: (v) => fmtQtyCompact(v) } } },
     },
   });
 }
@@ -517,8 +527,8 @@ function renderOrigin(data) {
       },
       scales: {
         x: scaleTicks(),
-        y: { position: "left", title: { display: true, text: "Frete (R$)", color: C.neutral, font: { size: 9, weight: "bold" } }, ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.grid } },
-        y1: { position: "right", title: { display: true, text: "Nº de NFs", color: C.ink, font: { size: 9, weight: "bold" } }, ticks: { color: C.text, font: { size: 8 } }, grid: { drawOnChartArea: false }, border: { color: C.grid } },
+        y: { position: "left", title: { display: true, text: "Frete (R$)", color: C.neutral, font: { size: 9, weight: "bold" } }, ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.axis } },
+        y1: { position: "right", title: { display: true, text: "Nº de NFs", color: C.ink, font: { size: 9, weight: "bold" } }, ticks: { color: C.text, font: { size: 8 } }, grid: { drawOnChartArea: false }, border: { color: C.axis } },
       },
     },
   });
@@ -534,13 +544,13 @@ function renderTicket(data) {
     type: "line",
     data: {
       labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Frete médio/NF (R$)", data: ticketByMonth, borderColor: C.neutral, backgroundColor: "rgba(226,6,19,0.10)", borderWidth: 2, pointRadius: 2.5, tension: 0.3, fill: true, spanGaps: true }],
+      datasets: [{ label: "Frete médio/NF (R$)", data: ticketByMonth, borderColor: C.neutral, backgroundColor: "rgba(181,18,27,0.10)", borderWidth: 2, pointRadius: 2.5, tension: 0.3, fill: true, spanGaps: true }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => it.parsed.y == null ? "Sem frete no mês" : `${fmtBRL(it.parsed.y)} por NF` } }) },
-      scales: { x: { ticks: { color: C.text, font: { size: 7 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.grid } },
+      scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
                 y: scaleY("Frete médio/NF (R$)", true) },
     },
   });
@@ -574,8 +584,8 @@ function renderProductSeries(data) {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtBRL(it.parsed.y)} de frete` } }) },
         scales: {
-          x: { ticks: { color: C.text, font: { size: 7 }, maxTicksLimit: 6, autoSkip: true }, grid: { display: false }, border: { color: C.grid } },
-          y: { ticks: { color: C.text, font: { size: 7 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.grid }, title: { display: true, text: "Frete (R$)", color: C.text, font: { size: 8 } } },
+          x: { ticks: { color: C.text, font: { size: 7 }, maxTicksLimit: 6, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
+          y: { ticks: { color: C.text, font: { size: 10 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.axis }, title: { display: true, text: "Frete (R$)", color: C.text, font: { size: 8 } } },
         },
       },
     });
@@ -624,7 +634,7 @@ function renderBlastbags(data) {
   renderBlastbagBar("chart-blastbag-qty", entries, {
     label: "Qtde",
     axisTitle: "Qtde total",
-    color: C.blue,
+    color: C.ink,
     value: (entry) => entry.qty,
     rankBy: "qty",
     valueLabel: (value) => fmtNum(value, 0),
@@ -638,7 +648,7 @@ function renderBlastbags(data) {
   renderBlastbagBar("chart-blastbag-vunit", entries, {
     label: "Valor unitário ponderado (R$)",
     axisTitle: "R$ por unidade",
-    color: C.green,
+    color: C.neutral,
     value: (entry) => entry.vunit,
     rankBy: "vunit",
     valueLabel: (value) => fmtBRLcompact(value),
@@ -865,24 +875,25 @@ function buildChart(canvasId, _kind, config) {
 function tooltipCfg(extra) { return Object.assign({}, tooltipBase(), extra || {}); }
 function tooltipBase() {
   return {
-    enabled: true, backgroundColor: "rgba(56,66,75,0.95)", titleColor: "#ffffff", bodyColor: "#e8e8e8",
-    borderColor: "#38424B", borderWidth: 0, padding: 12, cornerRadius: 4, caretSize: 8, caretPadding: 8,
+    enabled: true, backgroundColor: "rgba(60,63,68,0.95)", titleColor: "#ffffff", bodyColor: "#e8e8e8",
+    borderColor: "#3C3F44", borderWidth: 0, padding: 12, cornerRadius: 4, caretSize: 8, caretPadding: 8,
     displayColors: true, boxWidth: 10, boxHeight: 10, boxPadding: 4,
     titleFont: { weight: "700", size: 12 }, bodyFont: { size: 11 }, bodySpacing: 5,
   };
 }
-function scaleTicks() { return { ticks: { color: C.text, font: { size: 7 }, maxRotation: 45, autoSkip: true }, border: { color: C.grid } }; }
+function scaleTicks() { return { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, border: { color: C.axis } }; }
 function scaleY(title, compact) {
   return {
     title: { display: !!title, text: title, color: C.text, font: { size: 8, weight: "bold" } },
-    ticks: { color: C.text, font: { size: 7 }, callback: compact ? (v) => fmtBRLcompact(v) : undefined },
-    grid: { color: C.grid }, border: { color: C.grid },
+    ticks: { color: C.text, font: { size: 10 }, callback: compact ? (v) => fmtBRLcompact(v) : undefined },
+    grid: { color: C.grid }, border: { color: C.axis },
   };
 }
 
 const blastbagValueLabelsPlugin = {
   id: "blastbagValueLabels",
   afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || !opts.formatter) return;
     const meta = chart.getDatasetMeta(0);
     const dataset = chart.data.datasets[0];
     if (!meta || meta.hidden || !dataset) return;
@@ -932,8 +943,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   Chart.defaults.font.family = "'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif";
   Chart.defaults.font.size = 8;
-  Chart.defaults.color = "#6c747b";
-  Chart.defaults.borderColor = "rgba(56,66,75,0.08)";
+  Chart.defaults.color = "#8A8F96";
+  Chart.defaults.borderColor = "#C4C7CC";
   Object.assign(Chart.defaults.plugins.tooltip, tooltipBase());
   Chart.register(blastbagValueLabelsPlugin);
 
