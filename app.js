@@ -84,7 +84,6 @@ const mesesLongos = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
 function fmtDate(d) { return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear(); }
 function monthKey(r) { return r.ano + "-" + String(r.mes).padStart(2, "0"); }
 function monthLabel(k) { const [y, m] = k.split("-"); return meses[+m - 1] + "/" + y.slice(2); }
-function monthLong(k) { const [y, m] = k.split("-"); return mesesLongos[+m - 1] + " de " + y; }
 function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
 function stdev(arr) {
   if (arr.length < 2) return 0;
@@ -403,21 +402,9 @@ function updateActiveFilters() {
 }
 
 /* ===================== Render ===================== */
-// Rodapé: contagens e período vêm dos dados carregados (não do filtro)
-function updateSourceNote() {
-  if (!RECORDS.length) return;
-  const set = (id, t) => { const node = el(id); if (node) node.textContent = t; };
-  const keys = RECORDS.map(monthKey).filter((k) => /^\d{4}-\d{2}$/.test(k)).sort();
-  set("src-count", fmtInt(RECORDS.length));
-  if (keys.length) set("src-range", monthLabel(keys[0]) + " a " + monthLabel(keys[keys.length - 1]));
-  set("src-frete", fmtInt(RECORDS.filter((r) => r.vfrete != null).length));
-}
-
 function render() {
-  updateSourceNote();
   const data = filtered();
   renderKpis(data);
-  renderInsights(data);
   renderFreteMonthly(data);
   renderTotalMonthly(data);
   renderCount(data);
@@ -443,19 +430,12 @@ function renderKpis(data) {
   const months = new Set(data.map(monthKey));
 
   el("kpi-count").textContent = fmtInt(data.length);
-  el("kpi-count-hint").textContent =
-    data.length ? `${fmtInt(data.length)} NFs · ${months.size} ${months.size === 1 ? "mês" : "meses"} · média ${fmtNum(data.length / (months.size || 1), 1)}/mês` : "—";
 
   el("kpi-frete").textContent = fmtBRLcompact(freteTotal);
-  el("kpi-frete-hint").textContent =
-    freteVals.length ? `${fmtInt(freteVals.length)} NFs com frete · média ${fmtBRL(ticket)}` : "Sem frete preenchido";
 
   el("kpi-total").textContent = fmtBRLcompact(nfTotal);
-  el("kpi-total-hint").textContent =
-    totalVals.length ? `Soma de ${fmtInt(totalVals.length)} NFs` : "—";
 
   el("kpi-ticket").textContent = freteVals.length ? fmtBRLcompact(ticket) : "—";
-  el("kpi-ticket-hint").textContent = freteVals.length ? "Frete médio por nota" : "—";
 }
 
 /* Agrupa por mês mantendo todos os meses do intervalo (inclusive vazios). */
@@ -508,183 +488,6 @@ function changeLines(values, i, fmt) {
     out.push(`${fmtPct(d, true)} vs média mensal (${fmt(avg)})`);
   }
   return out;
-}
-
-/* ===================== Análises (insights) ===================== */
-function renderInsights(data) {
-  const box = el("insights-grid");
-  if (!box) return;
-  const cards = buildInsights(data);
-  box.innerHTML = cards.length
-    ? cards.map((c) =>
-      `<article class="insight insight--${c.tone}">` +
-      `<p class="insight__kicker">${escapeText(c.kicker)}</p>` +
-      `<p class="insight__value">${c.arrow ? `<span class="insight__arrow" aria-hidden="true">${c.arrow}</span>` : ""}${escapeText(c.value)}</p>` +
-      `<p class="insight__text">${escapeText(c.text)}</p>` +
-      `</article>`
-    ).join("")
-    : `<p class="insight-empty">Sem notas no filtro para gerar análises.</p>`;
-}
-
-function buildInsights(data) {
-  if (!data.length) return [];
-  const s = monthSeries(data);
-  const n = s.keys.length;
-  const rowsIn = ([a, b]) => s.groups.slice(a, b).flat();
-  const freteOf = (rows) => sum(rows.map((r) => r.vfrete || 0));
-  const ratioOf = (rows) => {
-    const both = rows.filter((r) => r.vfrete != null && r.vtotal != null && r.vtotal > 0);
-    const tot = sum(both.map((r) => r.vtotal));
-    return tot ? sum(both.map((r) => r.vfrete)) / tot : null;
-  };
-  // janela de comparação: 3 meses vs 3 anteriores; ou último mês vs anterior
-  const win = n >= 6
-    ? { cur: [n - 3, n], prev: [n - 6, n - 3], label: "Últimos 3 meses vs 3 anteriores" }
-    : n >= 2 ? { cur: [n - 1, n], prev: [n - 2, n - 1], label: "Último mês vs anterior" } : null;
-
-  const freteM = s.groups.map((g) => freteOf(g));
-  const totalFrete = freteOf(data);
-  const cards = [];
-
-  // 1. Tendência do frete
-  if (win) {
-    const cur = freteOf(rowsIn(win.cur)), prev = freteOf(rowsIn(win.prev));
-    const d = prev ? ((cur - prev) / Math.abs(prev)) * 100 : null;
-    cards.push({
-      kicker: "Tendência do frete",
-      value: fmtPct(d, true),
-      arrow: arrowFor(d),
-      tone: d == null ? "neutral" : d > 2 ? "bad" : d < -2 ? "good" : "neutral",
-      text: `${win.label}: ${fmtBRLcompact(cur)} contra ${fmtBRLcompact(prev)}.`,
-    });
-  } else {
-    cards.push({ kicker: "Tendência do frete", value: "—", tone: "neutral", text: "Precisa de pelo menos 2 meses no filtro." });
-  }
-
-  // 2. Mês de maior frete
-  const maxI = freteM.indexOf(Math.max(...freteM));
-  cards.push({
-    kicker: "Mês de maior frete",
-    value: fmtBRLcompact(freteM[maxI]),
-    tone: "neutral",
-    text: `${monthLong(s.keys[maxI])} concentra ${fmtPct(pct(freteM[maxI], totalFrete))} do frete do filtro. Média mensal: ${fmtBRLcompact(mean(freteM))}.`,
-  });
-
-  // 3. Frete sobre o valor das NFs
-  const overall = ratioOf(data);
-  if (overall != null) {
-    let value = fmtPct(overall * 100), arrow = "", tone = "neutral";
-    let text = `Frete equivale a ${fmtPct(overall * 100)} do valor total das NFs no filtro.`;
-    if (win) {
-      const cr = ratioOf(rowsIn(win.cur)), pr = ratioOf(rowsIn(win.prev));
-      if (cr != null && pr != null) {
-        const dp = (cr - pr) * 100;
-        value = fmtPct(cr * 100);
-        arrow = arrowFor(dp, 0.1);
-        tone = dp > 0.1 ? "bad" : dp < -0.1 ? "good" : "neutral";
-        text = `${win.label}: ${(dp > 0 ? "+" : "") + fmtNum(dp, 1)} p.p. (de ${fmtPct(pr * 100)} para ${fmtPct(cr * 100)} do valor das NFs).`;
-      }
-    }
-    cards.push({ kicker: "Frete sobre o valor das NFs", value, arrow, tone, text });
-  }
-
-  // 4. Custo do frete por unidade transportada (unidade dominante + demais)
-  const unitAgg = {};
-  data.forEach((r) => {
-    if (r.qty > 0 && r.vfrete != null && r.unidade !== "—") {
-      const a = (unitAgg[r.unidade] = unitAgg[r.unidade] || { f: 0, q: 0, n: 0 });
-      a.f += r.vfrete; a.q += r.qty; a.n += 1;
-    }
-  });
-  const units = Object.entries(unitAgg).sort((a, b) => b[1].f - a[1].f);
-  if (units.length) {
-    const [u, st] = units[0];
-    let tone = "neutral", arrow = "", trend = "";
-    if (win) {
-      const costIn = (range) => {
-        const rows = rowsIn(range).filter((r) => r.unidade === u && r.qty > 0 && r.vfrete != null);
-        const q = sum(rows.map((r) => r.qty));
-        return q ? freteOf(rows) / q : null;
-      };
-      const cc = costIn(win.cur), cp = costIn(win.prev);
-      if (cc != null && cp != null && cp) {
-        const d = ((cc - cp) / cp) * 100;
-        arrow = arrowFor(d);
-        tone = d > 2 ? "bad" : d < -2 ? "good" : "neutral";
-        trend = ` No recorte recente: ${fmtPct(d, true)} vs período anterior.`;
-      }
-    }
-    const others = units.slice(1).map(([ou, os]) => `${fmtBRL(os.f / os.q)} por ${ou}`);
-    cards.push({
-      kicker: "Custo do frete por unidade",
-      value: `${fmtBRL(st.f / st.q)} / ${u}`,
-      arrow, tone,
-      text: `Frete ÷ quantidade transportada (${fmtInt(st.n)} NFs com quantidade).${others.length ? " Também: " + others.join(", ") + "." : ""}${trend}`,
-    });
-  } else {
-    cards.push({ kicker: "Custo do frete por unidade", value: "—", tone: "neutral", text: "Sem quantidade e unidade preenchidas no filtro." });
-  }
-
-  // 5. Concentração do frete em produtos
-  const prodF = topProducts(data, (arr) => freteOf(arr), 999);
-  if (prodF.length) {
-    const top3 = prodF.slice(0, 3);
-    const share3 = pct(sum(top3.map((e) => e.val)), totalFrete);
-    cards.push({
-      kicker: "Concentração do frete",
-      value: fmtPct(share3),
-      tone: share3 >= 80 ? "bad" : "neutral",
-      text: `Top 3 produtos: ${top3.map((e) => `${shortName(e.p, 36)} (${fmtPct(pct(e.val, totalFrete))})`).join("; ")}.`,
-    });
-  }
-
-  // 6. Origem com maior frete
-  const origAgg = {};
-  data.forEach((r) => { origAgg[r.origem] = (origAgg[r.origem] || 0) + (r.vfrete || 0); });
-  const origEntries = Object.entries(origAgg).sort((a, b) => b[1] - a[1]);
-  if (origEntries.length) {
-    const [o1, v1] = origEntries[0];
-    const second = origEntries[1];
-    cards.push({
-      kicker: "Origem com maior frete",
-      value: fmtPct(pct(v1, totalFrete)),
-      tone: "neutral",
-      text: `${o1} responde por ${fmtBRLcompact(v1)} do frete${second ? `; ${second[0]}, por ${fmtBRLcompact(second[1])}` : ""}.`,
-    });
-  }
-
-  // 7. Meses fora do padrão (média + 2 desvios-padrão)
-  if (n >= 4) {
-    const m = mean(freteM), sd = stdev(freteM), limit = m + 2 * sd;
-    const hits = s.keys.filter((_, i) => sd > 0 && freteM[i] > limit);
-    cards.push({
-      kicker: "Meses fora do padrão",
-      value: hits.length ? `${hits.length} ${hits.length === 1 ? "mês" : "meses"}` : "Nenhum",
-      tone: hits.length ? "bad" : "good",
-      text: hits.length
-        ? `Frete acima de ${fmtBRLcompact(limit)} (média + 2 desvios): ${hits.slice(0, 3).map(monthLong).join(", ")}${hits.length > 3 ? " e outros" : ""}.`
-        : `Nenhum mês acima de ${fmtBRLcompact(limit)} (média + 2 desvios).`,
-    });
-  } else {
-    cards.push({ kicker: "Meses fora do padrão", value: "—", tone: "neutral", text: "Precisa de pelo menos 4 meses no filtro." });
-  }
-
-  // 8. Ritmo de emissão (intervalo médio entre dias com NF)
-  const distinctDays = new Set(data.map((r) => fmtDate(r.date))).size;
-  if (distinctDays > 1) {
-    const first = data[0].date, last = data[data.length - 1].date;
-    const span = Math.round((last - first) / 864e5);
-    cards.push({
-      kicker: "Intervalo entre emissões",
-      value: `${fmtNum(span / (distinctDays - 1), 1)} dias`,
-      tone: "neutral",
-      text: `${fmtInt(data.length)} NFs em ${fmtInt(distinctDays)} dias de emissão, entre ${fmtDate(first)} e ${fmtDate(last)}.`,
-    });
-  } else {
-    cards.push({ kicker: "Intervalo entre emissões", value: "—", tone: "neutral", text: `${fmtInt(data.length)} NF(s) em um único dia de emissão.` });
-  }
-
-  return cards;
 }
 
 function shortName(s, max) {
@@ -1010,17 +813,6 @@ function renderBlastbags(data) {
   }
 
   section.hidden = false;
-  const meta = el("blastbags-meta");
-  const dates = subset.map((r) => r.date).sort((a, b) => a - b);
-  const products = [...new Set(subset.map((r) => r.produto))];
-  if (meta && dates.length) {
-    const totalQty = sum(subset.map((r) => r.qty || 0));
-    const totalProducts = sum(subset.map((r) => r.vprod || 0));
-    meta.textContent =
-      `${fmtInt(subset.length)} NFs · ${fmtInt(products.length)} produtos · ` +
-      `${fmtDate(dates[0])} a ${fmtDate(dates[dates.length - 1])} · ` +
-      `${fmtNum(totalQty, 0)} un. · ${fmtBRLcompact(totalProducts)} em produtos`;
-  }
 
   const entries = productGroups(subset).map((entry) => {
     const qty = sum(entry.arr.map((r) => r.qty || 0));
@@ -1100,16 +892,15 @@ function renderBlastbagKpis(subset, entries) {
   const leader = [...entries].sort((a, b) => b.vprod - a.vprod)[0];
   const leaderShare = leader && totalProducts ? leader.vprod / totalProducts * 100 : 0;
   const cards = [
-    { label: "NFs Blastbag", value: fmtInt(subset.length), hint: `${fmtInt(entries.length)} produtos no filtro` },
-    { label: "Quantidade", value: fmtNum(totalQty, 0), hint: "Soma de unidades Blastbag" },
-    { label: "Valor produtos", value: fmtBRLcompact(totalProducts), hint: `Ticket médio ${fmtBRLcompact(subset.length ? totalProducts / subset.length : 0)}/NF` },
-    { label: "Maior participação", value: leader ? `${fmtNum(leaderShare, 1)}%` : "—", hint: leader ? leader.p : "Sem produto" },
+    { label: "NFs Blastbag", value: fmtInt(subset.length) },
+    { label: "Quantidade", value: fmtNum(totalQty, 0) },
+    { label: "Valor produtos", value: fmtBRLcompact(totalProducts) },
+    { label: "Maior participação", value: leader ? `${fmtNum(leaderShare, 1)}%` : "—" },
   ];
   box.innerHTML = cards.map((card) =>
     `<div class="blastbag-kpi">` +
     `<p class="blastbag-kpi__label">${escapeText(card.label)}</p>` +
     `<p class="blastbag-kpi__value">${escapeText(card.value)}</p>` +
-    `<p class="blastbag-kpi__hint">${escapeText(card.hint)}</p>` +
     `</div>`
   ).join("");
 }
@@ -1302,7 +1093,10 @@ function applyDim(chart, idx) {
  *  - clique: opts.pick(índice) aplica o filtro do painel
  */
 function buildChart(canvasId, config, opts = {}) {
-  if (CHARTS[canvasId]) { CHARTS[canvasId].destroy(); delete CHARTS[canvasId]; }
+  if (CHARTS[canvasId]) {
+    try { CHARTS[canvasId].stop(); CHARTS[canvasId].destroy(); } catch (e) { /* instância já encerrada */ }
+    delete CHARTS[canvasId];
+  }
   const canvas = el(canvasId);
   if (!canvas || !window.Chart) return;
 
@@ -1500,7 +1294,7 @@ document.addEventListener("DOMContentLoaded", () => {
   Chart.defaults.font.size = 10;
   Chart.defaults.color = "#8A8F96";
   Chart.defaults.borderColor = "#D5D8DC";
-  Chart.defaults.animation = { duration: 300 };
+  Chart.defaults.animation = false;
   Object.assign(Chart.defaults.plugins.tooltip, tooltipBase());
   Chart.register(blastbagValueLabelsPlugin, valueLabelsPlugin);
 

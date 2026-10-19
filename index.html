@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Notas Fiscais - US Vale Verde: séries temporais de valor do frete, valor total das NFs, quantidade e origem da operação.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=9">
+  <link rel="stylesheet" href="./styles.css?v=10">
 </head>
 <body>
   <header class="topbar">
@@ -88,7 +88,6 @@
 
   <main class="page">
     <section class="page-head">
-      <p class="eyebrow">Transporte e frete · origem Escada-PE e Quatro Barras-PR → Craíbas-AL</p>
       <h1>Notas Fiscais - US Vale Verde</h1>
     </section>
 
@@ -105,32 +104,19 @@
       <div class="kpi">
         <p class="kpi__label">NOTAS FISCAIS</p>
         <p class="kpi__value" id="kpi-count">—</p>
-        <p class="kpi__sub" id="kpi-count-hint">&nbsp;</p>
       </div>
       <div class="kpi">
         <p class="kpi__label">VALOR DO FRETE</p>
         <p class="kpi__value" id="kpi-frete">—</p>
-        <p class="kpi__sub" id="kpi-frete-hint">Custo de transporte total</p>
       </div>
       <div class="kpi">
         <p class="kpi__label">VALOR TOTAL DAS NFs</p>
         <p class="kpi__value" id="kpi-total">—</p>
-        <p class="kpi__sub" id="kpi-total-hint">Produtos + frete</p>
       </div>
       <div class="kpi">
         <p class="kpi__label">FRETE MÉDIO POR NF</p>
         <p class="kpi__value" id="kpi-ticket">—</p>
-        <p class="kpi__sub" id="kpi-ticket-hint">Ticket médio no filtro</p>
       </div>
-    </section>
-
-    <section class="insights" aria-labelledby="insights-title">
-      <div class="insights__head">
-        <p class="kicker">Análises</p>
-        <h2 id="insights-title">Leitura do filtro atual</h2>
-        <p>Calculado sobre as notas do filtro · passe o mouse nos gráficos para detalhes · clique em um mês, produto ou origem para filtrar</p>
-      </div>
-      <div class="insights__grid" id="insights-grid"></div>
     </section>
 
     <section class="chart-stack">
@@ -139,7 +125,6 @@
           <div class="chart-block__head">
             <p class="kicker">Frete</p>
             <h2>Valor do frete por mês</h2>
-            <p>Soma mensal em R$ · linha tracejada = média mensal · clique em um mês para filtrar</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-value"></canvas></div>
         </div>
@@ -147,7 +132,6 @@
           <div class="chart-block__head">
             <p class="kicker">Valores</p>
             <h2>Valor total das NFs por mês</h2>
-            <p>Produtos + frete, em R$ · clique em um mês para filtrar</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-total"></canvas></div>
         </div>
@@ -158,7 +142,6 @@
           <div class="chart-block__head">
             <p class="kicker">Notas</p>
             <h2>Nº de NFs emitidas por mês</h2>
-            <p>Quantidade de notas no filtro</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-count"></canvas></div>
         </div>
@@ -166,7 +149,6 @@
           <div class="chart-block__head">
             <p class="kicker">Quantidade</p>
             <h2>Quantidade transportada por mês</h2>
-            <p>Soma de Qtde (unidades variam: KG · PC · M)</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-qty"></canvas></div>
         </div>
@@ -177,7 +159,6 @@
           <div class="chart-block__head">
             <p class="kicker">Produtos</p>
             <h2>Valor do frete por produto</h2>
-            <p>Top 10 produtos por soma do frete · clique em uma barra para filtrar</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-frete-prod"></canvas></div>
         </div>
@@ -185,7 +166,6 @@
           <div class="chart-block__head">
             <p class="kicker">Produtos</p>
             <h2>Nº de NFs por produto</h2>
-            <p>Top 10 produtos por quantidade de notas · clique para filtrar</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-count-prod"></canvas></div>
         </div>
@@ -196,7 +176,6 @@
           <div class="chart-block__head">
             <p class="kicker">Origem</p>
             <h2>Participação por origem</h2>
-            <p>Escada-PE × Quatro Barras-PR — % do frete e % das NFs (mesma escala)</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-origin"></canvas></div>
         </div>
@@ -204,7 +183,6 @@
           <div class="chart-block__head">
             <p class="kicker">Frete</p>
             <h2>Frete médio por NF ao longo do tempo</h2>
-            <p>Valor médio do frete por nota, por mês (R$) · linha tracejada = média do período</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-ticket"></canvas></div>
         </div>
@@ -215,7 +193,6 @@
       <div class="extra-section__head">
         <p class="kicker">Produtos</p>
         <h2>Séries por produto — evolução mensal do frete</h2>
-        <p>Top produtos por valor de frete · valor médio mensal (R$)</p>
       </div>
       <div id="extra-charts" class="extra-grid"></div>
     </section>
@@ -225,7 +202,6 @@
         <div>
           <p class="kicker">Blastbags</p>
           <h2>Blastbags</h2>
-          <p id="blastbags-meta">Recorte dos produtos BLASTBAG da planilha.</p>
         </div>
       </div>
 
@@ -236,7 +212,6 @@
           <div class="chart-block__head">
             <p class="kicker">Blastbags</p>
             <h2>Quantidade por Blastbag</h2>
-            <p>Somatório de Qtde por produto · ordenado do maior para o menor</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-blastbag-qty"></canvas></div>
         </div>
@@ -244,7 +219,6 @@
           <div class="chart-block__head">
             <p class="kicker">Blastbags</p>
             <h2>Valor unitário por Blastbag</h2>
-            <p>Média ponderada por quantidade · barras mostram o preço relativo</p>
           </div>
           <div class="chart-block__body"><canvas id="chart-blastbag-vunit"></canvas></div>
         </div>
@@ -254,7 +228,6 @@
         <div class="chart-block__head">
           <p class="kicker">Blastbags</p>
           <h2>Valor total dos produtos por Blastbag</h2>
-          <p>Soma do valor total dos produtos por item · participação no mix em destaque</p>
         </div>
         <div class="chart-block__body chart-block__body--tall"><canvas id="chart-blastbag-vprod"></canvas></div>
       </div>
@@ -265,7 +238,6 @@
         <div>
           <p class="kicker">Detalhamento</p>
           <h2>Notas fiscais — detalhamento</h2>
-          <p>Ordenável por coluna · use a busca na barra lateral para filtrar por nº, produto, origem ou destinatário</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -289,14 +261,9 @@
         <div class="pager" id="pager"></div>
       </div>
     </section>
-
-    <p class="source-note">
-      <strong>Fonte:</strong> planilha de Notas Fiscais da US Vale Verde (<span id="src-count">—</span> NFs, <span id="src-range">—</span>) via Google Sheets. Valores em R$.
-      <strong>Valor do Frete</strong> considera <span id="src-frete">—</span> NFs com frete preenchido. <strong>Quantidade</strong> está na unidade da nota (KG, PC ou M): leia por produto.
-    </p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="./app.js?v=10"></script>
+  <script src="./app.js?v=12"></script>
 </body>
 </html>
