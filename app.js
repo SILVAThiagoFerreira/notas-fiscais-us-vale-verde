@@ -151,7 +151,6 @@ async function loadSheet() {
   }
   populateFilters();
   setStatus("ok", `${fmtInt(RECORDS.length)} notas carregadas.`);
-  document.getElementById("last-update").textContent = "Atualizado em " + nowBR();
   render();
 }
 
@@ -1318,7 +1317,6 @@ function setStatus(kind, text) {
   const t = el("status-text");
   if (t) t.textContent = text;
 }
-function nowBR() { return new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
 
 /* ===================== Barra lateral / flyouts ===================== */
 function initSideNav() {

@@ -304,8 +304,6 @@ body {
 .status.is-ok .status__dot { background: var(--green); }
 .status.is-error .status__dot { background: var(--red); }
 .status.is-error { color: var(--red); }
-.status__spacer { flex: 1; }
-.status__time { color: var(--faint); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
 /* ---------- Chips ---------- */
