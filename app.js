@@ -15,11 +15,11 @@ const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?form
 
 /* Paleta do hub + cores para os produtos */
 const C = {
-  ink: "#3C3F44",
-  inkFill: "rgba(60,63,68,0.12)",
-  neutral: "#B5121B",
-  grid: "rgba(0,0,0,0)",
-  axis: "#C4C7CC",
+  ink: "#38424B",
+  inkFill: "rgba(56,66,75,0.12)",
+  neutral: "#E20613",
+  grid: "#ECEDEF",
+  axis: "#D5D8DC",
   text: "#8A8F96",
   blue: "#1f6feb",
   purple: "#6f42c1",
@@ -27,7 +27,7 @@ const C = {
   amber: "#c47b00",
 };
 const PRODUCT_COLORS = [
-  "#B5121B", "#3C3F44", "#1f6feb", "#6f42c1", "#107c10", "#c47b00",
+  "#E20613", "#38424B", "#1f6feb", "#6f42c1", "#107c10", "#c47b00",
   "#0d8a8a", "#b9387a", "#5a6c00", "#7a4b11", "#2c5f8d", "#8a2c2c",
 ];
 
@@ -401,7 +401,7 @@ function renderValue(data) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: true, position: "bottom", labels: { color: C.text, boxWidth: 14, font: { size: 10 }, padding: 10 } },
+        legend: { display: true, position: "top", align: "start", labels: { color: C.text, boxWidth: 14, font: { size: 10 }, padding: 10 } },
         tooltip: tooltipCfg({ callbacks: { label: (it) => `${it.dataset.label}: ${fmtBRL(it.parsed.y)}` } }),
       },
       scales: {
@@ -421,11 +421,11 @@ function renderCount(data) {
     type: "bar",
     data: {
       labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Nº de NFs", data: months.map((m) => m.vals.length), backgroundColor: C.ink, borderRadius: 2 }],
+      datasets: [{ label: "Nº de NFs", data: months.map((m) => m.vals.length), backgroundColor: C.ink, borderRadius: 0 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtInt(it.parsed.y)} NFs` } }) },
+      plugins: { legend: { display: false }, barTopLabels: { formatter: (v) => fmtInt(v) }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtInt(it.parsed.y)} NFs` } }) },
       scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
                 y: scaleY("Nº de NFs") },
     },
@@ -438,7 +438,7 @@ function renderQty(data) {
     type: "bar",
     data: {
       labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Quantidade", data: months.map((m) => sum(m.vals.map((r) => r.qty || 0))), backgroundColor: "#8A8F96", borderRadius: 2 }],
+      datasets: [{ label: "Quantidade", data: months.map((m) => sum(m.vals.map((r) => r.qty || 0))), backgroundColor: "#8A8F96", borderRadius: 0 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -474,7 +474,7 @@ function renderFreteByProduct(data) {
     type: "bar",
     data: {
       labels: entries.map((e) => e.p),
-      datasets: [{ label: "Frete (R$)", data: entries.map((e) => e.val), backgroundColor: C.neutral, borderRadius: 2 }],
+      datasets: [{ label: "Frete (R$)", data: entries.map((e) => e.val), backgroundColor: C.neutral, borderRadius: 0 }],
     },
     options: {
       indexAxis: "y", responsive: true, maintainAspectRatio: false,
@@ -491,7 +491,7 @@ function renderCountByProduct(data) {
     type: "bar",
     data: {
       labels: entries.map((e) => e.p),
-      datasets: [{ label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 2 }],
+      datasets: [{ label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 0 }],
     },
     options: {
       indexAxis: "y", responsive: true, maintainAspectRatio: false,
@@ -514,15 +514,15 @@ function renderOrigin(data) {
     data: {
       labels: entries.map((e) => e.o),
       datasets: [
-        { label: "Frete (R$)", data: entries.map((e) => e.frete), backgroundColor: C.neutral, borderRadius: 2, yAxisID: "y" },
-        { label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 2, yAxisID: "y1" },
+        { label: "Frete (R$)", data: entries.map((e) => e.frete), backgroundColor: C.neutral, borderRadius: 0, yAxisID: "y" },
+        { label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 0, yAxisID: "y1" },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: true, position: "bottom", labels: { color: C.text, boxWidth: 12, font: { size: 10 }, padding: 10 } },
+        legend: { display: true, position: "top", align: "start", labels: { color: C.text, boxWidth: 12, font: { size: 10 }, padding: 10 } },
         tooltip: tooltipCfg({ callbacks: { label: (it) => it.datasetIndex === 0 ? `Frete: ${fmtBRL(it.parsed.y)}` : `NFs: ${fmtInt(it.parsed.y)}` } }),
       },
       scales: {
@@ -924,6 +924,29 @@ const blastbagValueLabelsPlugin = {
   },
 };
 
+// Rótulo de valor acima de cada barra vertical (ativado por plugins.barTopLabels)
+const barTopLabelsPlugin = {
+  id: "barTopLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || !opts.formatter) return;
+    const meta = chart.getDatasetMeta(0);
+    const dataset = chart.data.datasets[0];
+    if (!meta || meta.hidden || !dataset) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = "600 9px " + Chart.defaults.font.family;
+    ctx.fillStyle = opts.color || C.ink;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    meta.data.forEach((bar, i) => {
+      const value = dataset.data[i];
+      if (value == null) return;
+      ctx.fillText(opts.formatter(value, i), bar.x, bar.y - 3);
+    });
+    ctx.restore();
+  },
+};
+
 function setStatus(kind, text) {
   const el = document.getElementById("status");
   if (!el) return;
@@ -936,6 +959,49 @@ function setStatus(kind, text) {
 }
 function nowBR() { return new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
 
+/* ===================== Barra lateral / flyouts ===================== */
+function initSideNav() {
+  const items = [...document.querySelectorAll(".side-item[data-flyout]")];
+  if (!items.length) return;
+
+  const closeAll = (returnFocus) => {
+    items.forEach((item) => {
+      if (!item.classList.contains("is-open")) return;
+      item.classList.remove("is-open");
+      const btn = item.querySelector(".side-btn");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      if (returnFocus && btn) btn.focus();
+    });
+  };
+
+  items.forEach((item) => {
+    const btn = item.querySelector(".side-btn");
+    const closeBtn = item.querySelector(".flyout__close");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = !item.classList.contains("is-open");
+      closeAll(false);
+      if (willOpen) {
+        item.classList.add("is-open");
+        btn.setAttribute("aria-expanded", "true");
+        const field = item.querySelector("select, input");
+        if (field && window.matchMedia("(hover: hover)").matches) field.focus();
+      }
+    });
+    if (closeBtn) closeBtn.addEventListener("click", () => closeAll(true));
+  });
+
+  // clique fora fecha qualquer flyout aberto
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".side-nav")) closeAll(false);
+  });
+  // Esc fecha e devolve o foco ao botão
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAll(true);
+  });
+}
+document.addEventListener("DOMContentLoaded", initSideNav);
+
 document.addEventListener("DOMContentLoaded", () => {
   if (!window.Chart) {
     setStatus("error", "Biblioteca de gráficos (Chart.js) não carregou. Verifique sua conexão.");
@@ -944,9 +1010,9 @@ document.addEventListener("DOMContentLoaded", () => {
   Chart.defaults.font.family = "'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif";
   Chart.defaults.font.size = 8;
   Chart.defaults.color = "#8A8F96";
-  Chart.defaults.borderColor = "#C4C7CC";
+  Chart.defaults.borderColor = "#D5D8DC";
   Object.assign(Chart.defaults.plugins.tooltip, tooltipBase());
-  Chart.register(blastbagValueLabelsPlugin);
+  Chart.register(blastbagValueLabelsPlugin, barTopLabelsPlugin);
 
   // ordenação ao clicar no cabeçalho
   document.querySelectorAll(".nf-table thead th").forEach((th) => {
