@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Notas Fiscais - US Vale Verde: séries temporais de valor do frete, valor total das NFs, quantidade e origem da operação.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=7">
+  <link rel="stylesheet" href="./styles.css?v=8">
 </head>
 <body>
   <header class="topbar">
@@ -272,12 +272,12 @@
     </section>
 
     <p class="source-note">
-      <strong>Fonte:</strong> planilha de Notas Fiscais da US Vale Verde (357 NFs, jul/2024–jun/2026) via Google Sheets. Valores em R$.
-      <strong>Valor do Frete</strong> considera 311 NFs com frete preenchido. <strong>Quantidade</strong> está na unidade da nota (KG, PC ou M): leia por produto.
+      <strong>Fonte:</strong> planilha de Notas Fiscais da US Vale Verde (<span id="src-count">—</span> NFs, <span id="src-range">—</span>) via Google Sheets. Valores em R$.
+      <strong>Valor do Frete</strong> considera <span id="src-frete">—</span> NFs com frete preenchido. <strong>Quantidade</strong> está na unidade da nota (KG, PC ou M): leia por produto.
     </p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="./app.js?v=7"></script>
+  <script src="./app.js?v=8"></script>
 </body>
 </html>

@@ -317,7 +317,18 @@ function updateActiveFilters() {
 }
 
 /* ===================== Render ===================== */
+// Rodapé: contagens e período vêm dos dados carregados (não do filtro)
+function updateSourceNote() {
+  if (!RECORDS.length) return;
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  const keys = RECORDS.map(monthKey).filter((k) => /^\d{4}-\d{2}$/.test(k)).sort();
+  set("src-count", fmtInt(RECORDS.length));
+  if (keys.length) set("src-range", monthLabel(keys[0]) + " a " + monthLabel(keys[keys.length - 1]));
+  set("src-frete", fmtInt(RECORDS.filter((r) => r.vfrete != null).length));
+}
+
 function render() {
+  updateSourceNote();
   const data = filtered();
   renderKpis(data);
   renderValue(data);
@@ -562,6 +573,11 @@ function renderProductSeries(data) {
   container.innerHTML = "";
   // top 6 produtos por frete -> um card de evolução mensal cada
   const tops = topProducts(data, (arr) => sum(arr.map((r) => r.vfrete || 0)), 6);
+  // colunas sem linha órfã: 6 cards = 3x2; até 4 cards numa linha; 5 cards numa linha só em telas largas
+  const n = tops.length;
+  const wide = window.innerWidth >= 1500;
+  const cols = n <= 4 ? Math.max(n, 1) : n === 5 ? (wide ? 5 : 3) : 3;
+  container.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   tops.forEach((entry, i) => {
     const color = PRODUCT_COLORS[i % PRODUCT_COLORS.length];
     const subset = data.filter((r) => r.produto === entry.p);

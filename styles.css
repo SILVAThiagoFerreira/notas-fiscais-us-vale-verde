@@ -213,9 +213,9 @@ body {
 
 /* ---------- Page ---------- */
 .page {
-  margin: 0 0 0 var(--side-w);
-  max-width: 1440px;
-  padding: 28px 40px 56px 32px;
+  margin: 0 auto;
+  max-width: calc(1800px + var(--side-w) + 80px);
+  padding: 28px 40px 56px calc(var(--side-w) + 40px);
 }
 
 /* ---------- Page head: subtítulo cinza + título vermelho em caixa-alta ---------- */
@@ -411,8 +411,8 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
-.chart-block__body { position: relative; min-height: 220px; }
-.chart-block__body--tall { min-height: 300px; }
+.chart-block__body { position: relative; height: clamp(230px, 17vw, 320px); min-height: 220px; }
+.chart-block__body--tall { height: clamp(280px, 22vw, 400px); min-height: 300px; }
 .chart-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -500,7 +500,7 @@ body {
 }
 .extra-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 40px 32px;
 }
 .extra-card {
@@ -651,6 +651,7 @@ body {
   .chart-row { grid-template-columns: 1fr; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .blastbag-kpis { grid-template-columns: repeat(2, 1fr); }
+  .extra-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .page { padding-right: 28px; }
 }
 /* Celular: a barra lateral vira barra inferior e os flyouts sobem como gaveta */
@@ -690,6 +691,7 @@ body {
   }
 }
 @media (max-width: 560px) {
+  .extra-grid { grid-template-columns: 1fr !important; }
   .topbar { padding: 0 16px; }
   .page-head h1 { font-size: 24px; }
   .kpis { grid-template-columns: 1fr 1fr; gap: 20px; }
