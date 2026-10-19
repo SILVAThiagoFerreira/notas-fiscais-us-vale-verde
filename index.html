@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Notas Fiscais - US Vale Verde: séries temporais de valor do frete, valor total das NFs, quantidade e origem da operação.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=10">
+  <link rel="stylesheet" href="./styles.css?v=11">
 </head>
 <body>
   <header class="topbar">
@@ -117,6 +117,10 @@
         <p class="kpi__label">FRETE MÉDIO POR NF</p>
         <p class="kpi__value" id="kpi-ticket">—</p>
       </div>
+          <div class="kpi">
+        <p class="kpi__label">VALOR TOTAL DOS PRODUTOS</p>
+        <p class="kpi__value" id="kpi-products">—</p>
+      </div>
     </section>
 
     <section class="chart-stack">
@@ -131,13 +135,20 @@
         <div class="chart-block chart-block--half">
           <div class="chart-block__head">
             <p class="kicker">Valores</p>
-            <h2>Valor total das NFs por mês</h2>
+            <h2>Valor total dos produtos por mês</h2>
           </div>
-          <div class="chart-block__body"><canvas id="chart-total"></canvas></div>
+          <div class="chart-block__body"><canvas id="chart-products"></canvas></div>
         </div>
       </div>
 
       <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <p class="kicker">Valores</p>
+            <h2>Valor total das NFs por mês</h2>
+          </div>
+          <div class="chart-block__body"><canvas id="chart-total"></canvas></div>
+        </div>
         <div class="chart-block chart-block--half">
           <div class="chart-block__head">
             <p class="kicker">Notas</p>
@@ -145,6 +156,9 @@
           </div>
           <div class="chart-block__body"><canvas id="chart-count"></canvas></div>
         </div>
+      </div>
+
+      <div class="chart-row">
         <div class="chart-block chart-block--half">
           <div class="chart-block__head">
             <p class="kicker">Quantidade</p>
@@ -152,9 +166,6 @@
           </div>
           <div class="chart-block__body"><canvas id="chart-qty"></canvas></div>
         </div>
-      </div>
-
-      <div class="chart-row">
         <div class="chart-block chart-block--half">
           <div class="chart-block__head">
             <p class="kicker">Produtos</p>
@@ -162,6 +173,9 @@
           </div>
           <div class="chart-block__body"><canvas id="chart-frete-prod"></canvas></div>
         </div>
+      </div>
+
+      <div class="chart-row">
         <div class="chart-block chart-block--half">
           <div class="chart-block__head">
             <p class="kicker">Produtos</p>
@@ -169,9 +183,6 @@
           </div>
           <div class="chart-block__body"><canvas id="chart-count-prod"></canvas></div>
         </div>
-      </div>
-
-      <div class="chart-row">
         <div class="chart-block chart-block--half">
           <div class="chart-block__head">
             <p class="kicker">Origem</p>
@@ -179,7 +190,10 @@
           </div>
           <div class="chart-block__body"><canvas id="chart-origin"></canvas></div>
         </div>
-        <div class="chart-block chart-block--half">
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--full">
           <div class="chart-block__head">
             <p class="kicker">Frete</p>
             <h2>Frete médio por NF ao longo do tempo</h2>
@@ -187,6 +201,7 @@
           <div class="chart-block__body"><canvas id="chart-ticket"></canvas></div>
         </div>
       </div>
+
     </section>
 
     <section class="extra-section">
@@ -264,6 +279,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="./app.js?v=12"></script>
+  <script src="./app.js?v=13"></script>
 </body>
 </html>

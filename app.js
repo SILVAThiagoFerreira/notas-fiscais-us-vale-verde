@@ -407,6 +407,7 @@ function render() {
   renderKpis(data);
   renderFreteMonthly(data);
   renderTotalMonthly(data);
+  renderProductsMonthly(data);
   renderCount(data);
   renderQty(data);
   renderFreteByProduct(data);
@@ -435,6 +436,7 @@ function renderKpis(data) {
 
   el("kpi-total").textContent = fmtBRLcompact(nfTotal);
 
+  el("kpi-products").textContent = fmtBRLcompact(sum(data.map((r) => r.vprod || 0)));
   el("kpi-ticket").textContent = freteVals.length ? fmtBRLcompact(ticket) : "—";
 }
 
@@ -546,6 +548,34 @@ function renderTotalMonthly(data) {
         tooltip: tip(
           (it) => `Valor total das NFs: ${fmtBRL(it.parsed.y)}`,
           (i) => [shareLine(totalM, i), ...changeLines(totalM, i, fmtBRLcompact)]
+        ),
+      },
+      scales: { x: xCat(), y: yValue(axisMoney) },
+    },
+  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+}
+
+function renderProductsMonthly(data) {
+  const s = monthSeries(data);
+  const prodM = s.groups.map((g) => sum(g.map((r) => r.vprod || 0)));
+  const avg = mean(prodM);
+  buildChart("chart-products", {
+    type: "bar",
+    data: {
+      labels: s.labels,
+      datasets: [
+        { label: "Valor total dos produtos", data: prodM, backgroundColor: C.ink, borderRadius: 0, barPercentage: 0.72, categoryPercentage: 0.82 },
+        { label: "Média mensal", type: "line", data: s.labels.map(() => avg), borderColor: C.neutral, borderWidth: 1.2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0, fill: false, order: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: legendTop(),
+        tooltip: tip(
+          (it) => it.datasetIndex === 0 ? `Valor total dos produtos: ${fmtBRL(it.parsed.y)}` : `Média mensal: ${fmtBRL(it.parsed.y)}`,
+          (i) => [shareLine(prodM, i), ...changeLines(prodM, i, fmtBRLcompact)]
         ),
       },
       scales: { x: xCat(), y: yValue(axisMoney) },

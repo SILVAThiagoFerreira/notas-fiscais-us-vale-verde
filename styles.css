@@ -348,7 +348,7 @@ body {
 /* ---------- KPIs (números soltos, regra fina acima) ---------- */
 .kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 32px;
   margin-bottom: 44px;
 }
@@ -402,6 +402,18 @@ body {
 /* Altura única para todos os gráficos (grade balanceada) */
 .chart-block__body { position: relative; height: clamp(260px, 20vw, 330px); min-height: 240px; }
 .chart-block__body--tall { height: clamp(260px, 20vw, 330px); min-height: 240px; }
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px 48px;
+}
+.chart-block--full { grid-column: 1 / -1; }
+.chart-block--half {
+  background: none;
+  padding: 0;
+  box-shadow: none;
+}
 
 /* ---------- Seções (cabeçalho cinza + regra fina) ---------- */
 .extra-section {
