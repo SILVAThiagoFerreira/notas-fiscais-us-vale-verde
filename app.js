@@ -79,6 +79,20 @@ const axisQty = (v) => {
   return axisNum(v);
 };
 
+/* Rótulos curtos para as barras */
+const labelMoney = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return "R$ " + fmtNum(v / 1e6, 1) + " mi";
+  if (a >= 1e3) return "R$ " + fmtNum(v / 1e3, 0) + " mil";
+  return "R$ " + fmtNum(v, 0);
+};
+const labelQty = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return fmtNum(v / 1e6, 1) + " mi";
+  if (a >= 1e3) return fmtNum(v / 1e3, 0) + " mil";
+  return fmtNum(v, 0);
+};
+
 const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const mesesLongos = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 function fmtDate(d) { return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear(); }
@@ -337,10 +351,16 @@ function populateFilters() {
 const el = (id) => document.getElementById(id);
 
 function filtered() {
+  return filteredExcept(null);
+}
+
+/* Filtros aplicados exceto o informado: cada gráfico mostra todas as suas barras
+   e destaca a seleção, enquanto as demais análises respeitam o filtro completo. */
+function filteredExcept(skipId) {
   const y = el("filter-year").value;
-  const mo = el("filter-month").value;
-  const o = el("filter-origin").value;
-  const p = el("filter-product").value;
+  const mo = skipId === "filter-month" ? "" : el("filter-month").value;
+  const o = skipId === "filter-origin" ? "" : el("filter-origin").value;
+  const p = skipId === "filter-product" ? "" : el("filter-product").value;
   return RECORDS.filter((r) =>
     (!y || String(r.ano) === y) &&
     (!mo || String(r.mes) === mo) &&
@@ -404,18 +424,21 @@ function updateActiveFilters() {
 /* ===================== Render ===================== */
 function render() {
   const data = filtered();
+  const byMonth = filteredExcept("filter-month");
+  const byProduct = filteredExcept("filter-product");
+  const byOrigin = filteredExcept("filter-origin");
   renderKpis(data);
-  renderFreteMonthly(data);
-  renderTotalMonthly(data);
-  renderProductsMonthly(data);
-  renderCount(data);
-  renderQty(data);
-  renderFreteByProduct(data);
-  renderCountByProduct(data);
-  renderOrigin(data);
-  renderTicket(data);
+  renderFreteMonthly(byMonth);
+  renderTotalMonthly(byMonth);
+  renderProductsMonthly(byMonth);
+  renderCount(byMonth);
+  renderQty(byMonth);
+  renderFreteByProduct(byProduct);
+  renderCountByProduct(byProduct);
+  renderOrigin(byOrigin);
+  renderTicket(byMonth);
   renderProductSeries(data);
-  renderBlastbags(data);
+  renderBlastbags(byProduct);
   renderTable(data);
   updateActiveFilters();
 }
@@ -516,7 +539,8 @@ function renderFreteMonthly(data) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: legendTop(),
+        valueLabels: { formatter: labelMoney },
+        legend: legendBottom(),
         tooltip: tip(
           (it) => it.datasetIndex === 0 ? `Frete: ${fmtBRL(it.parsed.y)}` : `Média mensal: ${fmtBRL(it.parsed.y)}`,
           (i) => [
@@ -528,7 +552,7 @@ function renderFreteMonthly(data) {
       },
       scales: { x: xCat(), y: yValue(axisMoney) },
     },
-  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+  }, { pick: (i) => toggleMonth(s.keys[i]), sel: monthSelIdx(s.keys) });
 }
 
 function renderTotalMonthly(data) {
@@ -544,6 +568,7 @@ function renderTotalMonthly(data) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
+        valueLabels: { formatter: labelMoney },
         legend: { display: false },
         tooltip: tip(
           (it) => `Valor total das NFs: ${fmtBRL(it.parsed.y)}`,
@@ -552,7 +577,7 @@ function renderTotalMonthly(data) {
       },
       scales: { x: xCat(), y: yValue(axisMoney) },
     },
-  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+  }, { pick: (i) => toggleMonth(s.keys[i]), sel: monthSelIdx(s.keys) });
 }
 
 function renderProductsMonthly(data) {
@@ -572,7 +597,8 @@ function renderProductsMonthly(data) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: legendTop(),
+        valueLabels: { formatter: labelMoney },
+        legend: legendBottom(),
         tooltip: tip(
           (it) => it.datasetIndex === 0 ? `Valor total dos produtos: ${fmtBRL(it.parsed.y)}` : `Média mensal: ${fmtBRL(it.parsed.y)}`,
           (i) => [shareLine(prodM, i), ...changeLines(prodM, i, fmtBRLcompact)]
@@ -580,7 +606,7 @@ function renderProductsMonthly(data) {
       },
       scales: { x: xCat(), y: yValue(axisMoney) },
     },
-  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+  }, { pick: (i) => toggleMonth(s.keys[i]), sel: monthSelIdx(s.keys) });
 }
 
 function renderCount(data) {
@@ -596,6 +622,7 @@ function renderCount(data) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
+        valueLabels: { formatter: fmtInt },
         legend: { display: false },
         tooltip: tip(
           (it) => `${fmtInt(it.parsed.y)} NFs`,
@@ -604,7 +631,7 @@ function renderCount(data) {
       },
       scales: { x: xCat(), y: yValue(fmtInt) },
     },
-  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+  }, { pick: (i) => toggleMonth(s.keys[i]), sel: monthSelIdx(s.keys) });
 }
 
 function renderQty(data) {
@@ -625,6 +652,7 @@ function renderQty(data) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
+        valueLabels: { formatter: labelQty },
         legend: { display: false },
         tooltip: tip(
           (it) => `${fmtNum(it.parsed.y, 0)} unidades somadas`,
@@ -636,7 +664,7 @@ function renderQty(data) {
       },
       scales: { x: xCat(), y: yValue(axisQty) },
     },
-  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+  }, { pick: (i) => toggleMonth(s.keys[i]), sel: monthSelIdx(s.keys) });
 }
 
 function topProducts(data, metricFn, limit) {
@@ -674,7 +702,7 @@ function renderFreteByProduct(data) {
       },
       scales: { x: yValue(axisMoney), y: yCategory() },
     },
-  }, { pick: (i) => toggleSelect("filter-product", entries[i].p), dim: true });
+  }, { pick: (i) => toggleSelect("filter-product", entries[i].p), sel: filterSelIdx(entries.map((e) => e.p), "filter-product") });
 }
 
 function renderCountByProduct(data) {
@@ -703,7 +731,7 @@ function renderCountByProduct(data) {
       },
       scales: { x: yValue(fmtInt), y: yCategory() },
     },
-  }, { pick: (i) => toggleSelect("filter-product", entries[i].p), dim: true });
+  }, { pick: (i) => toggleSelect("filter-product", entries[i].p), sel: filterSelIdx(entries.map((e) => e.p), "filter-product") });
 }
 
 function renderOrigin(data) {
@@ -748,7 +776,7 @@ function renderOrigin(data) {
         },
       },
     },
-  }, { pick: (i) => toggleSelect("filter-origin", entries[i].o), dim: true });
+  }, { pick: (i) => toggleSelect("filter-origin", entries[i].o), sel: filterSelIdx(entries.map((e) => e.o), "filter-origin") });
 }
 
 function renderTicket(data) {
@@ -947,7 +975,7 @@ function renderBlastbagBar(canvasId, entries, cfg) {
       datasets: [{
         label: cfg.label,
         data: ranked.map((e) => e.chartValue),
-        backgroundColor: (ctx) => barGradient(ctx, cfg.color),
+        backgroundColor: cfg.color,
         borderColor: cfg.color,
         borderWidth: 1,
         borderRadius: 3,
@@ -992,18 +1020,8 @@ function renderBlastbagBar(canvasId, entries, cfg) {
     },
   }, {
     pick: (i) => toggleSelect("filter-product", ranked[i].p),
-    dim: true,
+    sel: filterSelIdx(ranked.map((e) => e.p), "filter-product"),
   });
-}
-
-function barGradient(ctx, color) {
-  const chart = ctx.chart;
-  const area = chart.chartArea;
-  if (!area) return color;
-  const gradient = chart.ctx.createLinearGradient(area.left, 0, area.right, 0);
-  gradient.addColorStop(0, color + "cc");
-  gradient.addColorStop(1, color);
-  return gradient;
 }
 
 /* ===================== Tabela ===================== */
@@ -1105,22 +1123,34 @@ function withAlpha(color, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-/* Esmaece as barras não selecionadas ao passar o mouse (apenas datasets de barra com cor fixa) */
-function applyDim(chart, idx) {
-  if (chart._dimIdx === idx) return;
-  chart._dimIdx = idx;
-  chart.data.datasets.forEach((ds) => {
+/* Seleção (só por clique): a barra escolhida fica em destaque e as demais são esmaecidas.
+   O índice vem do filtro ativo, então a seleção permanece até o filtro ser limpo. */
+function colorSelection(config, sel) {
+  if (config.type !== "bar" || sel == null) return;
+  config.data.datasets.forEach((ds) => {
     if (ds.type && ds.type !== "bar") return;
-    if (typeof ds._base !== "string") return;
-    ds.backgroundColor = ds.data.map((_, i) => (idx == null || i === idx ? ds._base : withAlpha(ds._base, 0.28)));
+    if (typeof ds.backgroundColor !== "string") return;
+    const base = ds.backgroundColor;
+    ds.backgroundColor = ds.data.map((_, i) => (i === sel ? base : withAlpha(base, 0.28)));
   });
-  chart.update("none");
+}
+
+function monthSelIdx(keys) {
+  const y = el("filter-year").value, m = el("filter-month").value;
+  if (!y || !m) return null;
+  const i = keys.indexOf(y + "-" + String(+m).padStart(2, "0"));
+  return i < 0 ? null : i;
+}
+function filterSelIdx(labels, filterId) {
+  const v = el(filterId).value;
+  if (!v) return null;
+  const i = labels.indexOf(v);
+  return i < 0 ? null : i;
 }
 
 /**
- * Cria o gráfico com interações:
- *  - hover: cursor pointer quando há ação de clique; barras não focadas são esmaecidas
- *  - clique: opts.pick(índice) aplica o filtro do painel
+ * Cria o gráfico: hover só mostra tooltip (cursor pointer quando há clique);
+ * clique chama opts.pick(índice) e o filtro redesenha a seleção.
  */
 function buildChart(canvasId, config, opts = {}) {
   if (CHARTS[canvasId]) {
@@ -1130,15 +1160,14 @@ function buildChart(canvasId, config, opts = {}) {
   const canvas = el(canvasId);
   if (!canvas || !window.Chart) return;
 
-  config.data.datasets.forEach((ds) => {
-    if (typeof ds.backgroundColor === "string") ds._base = ds.backgroundColor;
-  });
+  colorSelection(config, opts.sel);
 
   const options = config.options || (config.options = {});
-  options.onHover = (evt, els, chart) => {
-    const hit = !!(els && els.length);
-    canvas.style.cursor = hit && opts.pick ? "pointer" : "default";
-    if (opts.dim) applyDim(chart, hit ? els[0].index : null);
+  if (options.indexAxis !== "y") {
+    options.layout = Object.assign({ padding: { top: 16 } }, options.layout || {});
+  }
+  options.onHover = (evt, els) => {
+    canvas.style.cursor = els && els.length && opts.pick ? "pointer" : "default";
   };
   options.onClick = (evt, els) => {
     if (!opts.pick || !els || !els.length) return;
@@ -1170,6 +1199,9 @@ function tip(labelFn, extraFn) {
     },
   });
 }
+function legendBottom() {
+  return { display: true, position: "bottom", align: "center", labels: { color: C.text, boxWidth: 10, boxHeight: 10, font: { size: 10 }, padding: 14 } };
+}
 function legendTop() {
   return { display: true, position: "top", align: "start", labels: { color: C.text, boxWidth: 10, boxHeight: 10, font: { size: 10 }, padding: 14 } };
 }
@@ -1191,12 +1223,14 @@ function yCategory() {
 function yValue(fmt, maxTicks) {
   return {
     beginAtZero: true,
+    grace: "25%",
     ticks: { color: C.text, font: { size: 10 }, maxTicksLimit: maxTicks || 7, callback: (v) => fmt(v) },
     grid: { color: C.grid }, border: { display: false },
   };
 }
 
-/* Rótulos de valor: no fim das barras horizontais, acima das verticais */
+/* Rótulos de valor: horizontais no fim das barras; verticais acima da barra,
+   girados quando a barra é estreita e ocultos quando não há espaço */
 const valueLabelsPlugin = {
   id: "valueLabels",
   afterDatasetsDraw(chart, _args, opts) {
@@ -1204,21 +1238,35 @@ const valueLabelsPlugin = {
     const { ctx } = chart;
     const horizontal = chart.options.indexAxis === "y";
     ctx.save();
-    ctx.font = "600 10px " + Chart.defaults.font.family;
-    ctx.fillStyle = C.ink;
+    ctx.font = "600 9px " + Chart.defaults.font.family;
+    ctx.fillStyle = "#4d555d";
     chart.data.datasets.forEach((ds, di) => {
       const meta = chart.getDatasetMeta(di);
-      if (meta.hidden || (ds.type && ds.type !== "bar")) return;
-      meta.data.forEach((bar, i) => {
+      if (meta.hidden || (ds.type && ds.type !== "bar") || !meta.data.length) return;
+      const bars = meta.data;
+      const step = bars.length > 1
+        ? Math.abs(horizontal ? bars[1].y - bars[0].y : bars[1].x - bars[0].x)
+        : (horizontal ? chart.height : chart.width);
+      bars.forEach((bar, i) => {
         const v = ds.data[i];
         if (v == null || !isFinite(v)) return;
         const label = opts.formatter(v, i, di);
         if (horizontal) {
+          if (step < 10) return;
           ctx.textAlign = "left"; ctx.textBaseline = "middle";
           ctx.fillText(label, bar.x + 6, bar.y);
-        } else {
+          return;
+        }
+        if (ctx.measureText(label).width + 4 <= step) {
           ctx.textAlign = "center"; ctx.textBaseline = "bottom";
           ctx.fillText(label, bar.x, bar.y - 4);
+        } else if (step >= 13) {
+          ctx.save();
+          ctx.translate(bar.x, bar.y - 4);
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = "left"; ctx.textBaseline = "middle";
+          ctx.fillText(label, 0, 0);
+          ctx.restore();
         }
       });
     });
