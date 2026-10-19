@@ -3,33 +3,31 @@
    Lê em tempo real a planilha Google Sheets (gviz) e renderiza os gráficos.
    Atualiza a cada acesso — sem servidor, sem build.
 
-   Aspectos cobertos: valor do frete, valor total das NFs, quantidade
-   transportada e nº de notas — todos como séries temporais mensais,
-   recortes por produto e por origem, KPIs financeiros e tabela
-   detalhada com busca/ordenação/paginação.
+   Gráficos: passe o mouse para detalhes; clique em um mês, produto ou
+   origem para filtrar o painel inteiro (mesmo estado dos filtros laterais).
    ===================================================================== */
 
 const SHEET_ID = "14Z-nzXSWC4iaqJcLWmaPOgYjGU2pOJeT";
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
 const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
 
-/* Paleta do hub + cores para os produtos */
+/* Paleta do hub (Enaex) */
 const C = {
   ink: "#38424B",
-  inkFill: "rgba(56,66,75,0.12)",
   neutral: "#E20613",
   grid: "#ECEDEF",
   axis: "#D5D8DC",
   text: "#8A8F96",
-  blue: "#1f6feb",
-  purple: "#6f42c1",
   green: "#107c10",
-  amber: "#c47b00",
 };
 const PRODUCT_COLORS = [
   "#E20613", "#38424B", "#1f6feb", "#6f42c1", "#107c10", "#c47b00",
   "#0d8a8a", "#b9387a", "#5a6c00", "#7a4b11", "#2c5f8d", "#8a2c2c",
 ];
+
+/* Limites de sanidade: valores fora disso são tratados como erro de digitação */
+const MAX_MONEY = 1e9;
+const MAX_QTY = 1e8;
 
 const norm = (s) =>
   (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -44,7 +42,13 @@ const fmtInt = (n) => nfBR.format(n || 0);
 const fmtNum = (n, d = 0) =>
   new Intl.NumberFormat("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }).format(n || 0);
 const fmtBRL = (n) => "R$ " + dec2.format(n || 0);
-/** Versão compacta para KPIs grandes: R$ 3,05 mi / R$ 76,10 mi */
+const fmtPct = (n, signed = false) => {
+  if (n == null || !isFinite(n)) return "—";
+  const s = fmtNum(Math.abs(n), 1) + "%";
+  if (!signed) return (n < 0 ? "−" : "") + s;
+  return (n > 0 ? "+" : n < 0 ? "−" : "") + s;
+};
+/** Versão compacta para KPIs e tooltips: R$ 3,05 mi / R$ 76,10 mil */
 const fmtBRLcompact = (n) => {
   if (n == null || !isFinite(n)) return "—";
   const a = Math.abs(n);
@@ -52,8 +56,7 @@ const fmtBRLcompact = (n) => {
   if (a >= 1e3) return "R$ " + dec2.format(n / 1e3) + " mil";
   return "R$ " + dec2.format(n);
 };
-
-/** Versão compacta para quantidades (sem R$): 2,50 mi / 500 mil */
+/** Versão compacta para quantidades (sem R$) */
 const fmtQtyCompact = (n) => {
   if (n == null || !isFinite(n)) return "—";
   const a = Math.abs(n);
@@ -61,13 +64,36 @@ const fmtQtyCompact = (n) => {
   if (a >= 1e3) return dec2.format(n / 1e3) + " mil";
   return dec2.format(n);
 };
+/** Ticks dos eixos: poucos dígitos (R$ 2 mi, R$ 500 mil) */
+const axisNum = (x) => { const r = Math.round(x * 10) / 10; return fmtNum(r, r % 1 ? 1 : 0); };
+const axisMoney = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return "R$ " + axisNum(v / 1e6) + " mi";
+  if (a >= 1e3) return "R$ " + axisNum(v / 1e3) + " mil";
+  return "R$ " + axisNum(v);
+};
+const axisQty = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return axisNum(v / 1e6) + " mi";
+  if (a >= 1e3) return axisNum(v / 1e3) + " mil";
+  return axisNum(v);
+};
 
 const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const mesesLongos = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 function fmtDate(d) { return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear(); }
 function monthKey(r) { return r.ano + "-" + String(r.mes).padStart(2, "0"); }
 function monthLabel(k) { const [y, m] = k.split("-"); return meses[+m - 1] + "/" + y.slice(2); }
+function monthLong(k) { const [y, m] = k.split("-"); return mesesLongos[+m - 1] + " de " + y; }
 function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
+function stdev(arr) {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(mean(arr.map((v) => (v - m) * (v - m))));
+}
 function sum(arr) { return arr.reduce((a, b) => a + (b || 0), 0); }
+const pct = (part, whole) => (whole ? (part / whole) * 100 : 0);
+const arrowFor = (d, th = 2) => (d == null || !isFinite(d) || Math.abs(d) < th ? "►" : d > 0 ? "▲" : "▼");
 function weightedMean(rows, valueKey, weightKey) {
   let total = 0, weight = 0;
   rows.forEach((r) => {
@@ -172,13 +198,47 @@ function parseDateCell(v) {
   return null;
 }
 
-/** Lê número pt-BR de string ("R$ 8.449,20" / "38.000,00" / 8449.2). */
+/**
+ * Lê número pt-BR de forma tolerante:
+ *  - "R$ 8.449,20" -> 8449.2   (vírgula é sempre decimal; pontos são milhar)
+ *  - "2988,000"    -> 2988     (decimal com casas extras)
+ *  - "3.880.00"    -> 3880     (ponto final com 1-2 dígitos = decimal)
+ *  - "1.234"       -> 1234     (ponto com 3 dígitos = milhar)
+ *  - "30.000.,100" -> 30000.1
+ *  Texto sem dígitos (ou vazio) retorna null.
+ */
 function br(v) {
   if (v == null || v === "") return null;
   if (typeof v === "number") return isFinite(v) ? v : null;
-  const s = String(v).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
-  const n = parseFloat(s);
-  return isFinite(n) ? n : null;
+  const raw = String(v).trim();
+  if (!/\d/.test(raw)) return null;
+  const neg = raw.includes("-");
+  const s = raw.replace(/[^\d,.]/g, "");
+  let intPart = s, fracPart = "";
+  const lastComma = s.lastIndexOf(",");
+  if (lastComma >= 0) {
+    intPart = s.slice(0, lastComma);
+    fracPart = s.slice(lastComma + 1);
+  } else {
+    const lastDot = s.lastIndexOf(".");
+    const after = lastDot >= 0 ? s.length - lastDot - 1 : -1;
+    if (after === 1 || after === 2) {
+      intPart = s.slice(0, lastDot);
+      fracPart = s.slice(lastDot + 1);
+    }
+  }
+  const intDigits = intPart.replace(/\D/g, "");
+  const fracDigits = fracPart.replace(/\D/g, "");
+  if (!intDigits && !fracDigits) return null;
+  let n = parseFloat((intDigits || "0") + (fracDigits ? "." + fracDigits : ""));
+  if (!isFinite(n)) return null;
+  if (neg) n = -n;
+  return n;
+}
+
+/** Valor plausível ou null (negativos e absurdos são descartados). */
+function clean(n, max) {
+  return n != null && isFinite(n) && n >= 0 && n <= max ? n : null;
 }
 
 function buildRecords(table) {
@@ -206,9 +266,9 @@ function buildRecords(table) {
     const dt = parseDateCell(cell(f.data));
     if (!dt) continue;
 
-    const vfrete = num(f.vfrete);
-    const vtotal = num(f.vtotal);
-    const qty = num(f.qtde);
+    const vfrete = clean(num(f.vfrete), MAX_MONEY);
+    const vtotal = clean(num(f.vtotal), MAX_MONEY);
+    const qty = clean(num(f.qtde), MAX_QTY);
     if (vfrete == null && vtotal == null && qty == null) continue;
 
     let unidade = norm(str(f.unidade)) || "—";
@@ -229,8 +289,8 @@ function buildRecords(table) {
       produto: str(f.produto) || "—",
       qty,
       unidade,
-      vunit: num(f.vunit),
-      vprod: num(f.vprod),
+      vunit: clean(num(f.vunit), MAX_MONEY),
+      vprod: clean(num(f.vprod), MAX_MONEY),
       vfrete,
       vtotal,
     });
@@ -247,10 +307,12 @@ function populateFilters() {
   const products = [...new Set(RECORDS.map((r) => r.produto).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-  const ySel = document.getElementById("filter-year");
-  const mSel = document.getElementById("filter-month");
-  const oSel = document.getElementById("filter-origin");
-  const pSel = document.getElementById("filter-product");
+  const ySel = el("filter-year");
+  const mSel = el("filter-month");
+  const oSel = el("filter-origin");
+  const pSel = el("filter-product");
+  // preserva a seleção atual quando a planilha é recarregada
+  const keep = [ySel, mSel, oSel, pSel].map((s) => s.value);
 
   ySel.innerHTML = `<option value="">Todos os anos</option>` +
     years.map((y) => `<option value="${y}">${y}</option>`).join("");
@@ -260,28 +322,52 @@ function populateFilters() {
     origins.map((o) => `<option value="${escapeAttr(o)}">${escapeText(o)}</option>`).join("");
   pSel.innerHTML = `<option value="">Todos os produtos</option>` +
     products.map((p) => `<option value="${escapeAttr(p)}">${escapeText(p)}</option>`).join("");
+  [ySel, mSel, oSel, pSel].forEach((s, i) => {
+    if (Array.from(s.options).some((o) => o.value === keep[i])) s.value = keep[i];
+  });
 
   [ySel, mSel, oSel, pSel].forEach((s) => (s.onchange = render));
-  document.getElementById("filter-reset").onclick = () => {
+  el("filter-reset").onclick = () => {
     ySel.value = ""; mSel.value = ""; oSel.value = ""; pSel.value = "";
     STATE.page = 1; STATE.search = "";
-    document.getElementById("table-search").value = "";
+    el("table-search").value = "";
     render();
   };
 }
 
+const el = (id) => document.getElementById(id);
+
 function filtered() {
-  const y = document.getElementById("filter-year").value;
-  const mo = document.getElementById("filter-month").value;
-  const o = document.getElementById("filter-origin").value;
-  const p = document.getElementById("filter-product").value;
-  const data = RECORDS.filter((r) =>
+  const y = el("filter-year").value;
+  const mo = el("filter-month").value;
+  const o = el("filter-origin").value;
+  const p = el("filter-product").value;
+  return RECORDS.filter((r) =>
     (!y || String(r.ano) === y) &&
     (!mo || String(r.mes) === mo) &&
     (!o || r.origem === o) &&
     (!p || r.produto === p)
   );
-  return data;
+}
+
+/* Clique nos gráficos: alterna o filtro (clicar de novo limpa) e sincroniza com a barra lateral */
+function filtersChanged() {
+  STATE.page = 1;
+  render();
+}
+function toggleSelect(id, value) {
+  const s = el(id);
+  if (!s) return;
+  s.value = s.value === String(value) ? "" : String(value);
+  filtersChanged();
+}
+function toggleMonth(key) {
+  const [y, m] = key.split("-");
+  const ySel = el("filter-year"), mSel = el("filter-month");
+  const on = ySel.value === String(+y) && mSel.value === String(+m);
+  ySel.value = on ? "" : String(+y);
+  mSel.value = on ? "" : String(+m);
+  filtersChanged();
 }
 
 const FILTER_DEFS = [
@@ -292,15 +378,15 @@ const FILTER_DEFS = [
 ];
 
 function updateActiveFilters() {
-  const box = document.getElementById("active-filters");
+  const box = el("active-filters");
   if (!box) return;
   const chips = [];
   FILTER_DEFS.forEach((fd) => {
-    const sel = document.getElementById(fd.id);
+    const sel = el(fd.id);
     if (sel && sel.value) {
       const display = fd.name ? fd.name(sel.value) : sel.value;
       chips.push(
-        `<button class="chip" data-id="${fd.id}" type="button">` +
+        `<button class="chip" data-id="${fd.id}" type="button" aria-label="Remover filtro ${fd.label}: ${escapeAttr(display)}">` +
         `<span class="chip__k">${fd.label}:</span> <span class="chip__v">${escapeText(display)}</span>` +
         `<span class="chip__x" aria-hidden="true">×</span></button>`
       );
@@ -310,8 +396,8 @@ function updateActiveFilters() {
   box.style.display = chips.length ? "" : "none";
   box.querySelectorAll(".chip").forEach((btn) => {
     btn.onclick = () => {
-      const s = document.getElementById(btn.dataset.id);
-      if (s) { s.value = ""; STATE.page = 1; render(); }
+      const s = el(btn.dataset.id);
+      if (s) { s.value = ""; filtersChanged(); }
     };
   });
 }
@@ -320,7 +406,7 @@ function updateActiveFilters() {
 // Rodapé: contagens e período vêm dos dados carregados (não do filtro)
 function updateSourceNote() {
   if (!RECORDS.length) return;
-  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  const set = (id, t) => { const node = el(id); if (node) node.textContent = t; };
   const keys = RECORDS.map(monthKey).filter((k) => /^\d{4}-\d{2}$/.test(k)).sort();
   set("src-count", fmtInt(RECORDS.length));
   if (keys.length) set("src-range", monthLabel(keys[0]) + " a " + monthLabel(keys[keys.length - 1]));
@@ -331,7 +417,9 @@ function render() {
   updateSourceNote();
   const data = filtered();
   renderKpis(data);
-  renderValue(data);
+  renderInsights(data);
+  renderFreteMonthly(data);
+  renderTotalMonthly(data);
   renderCount(data);
   renderQty(data);
   renderFreteByProduct(data);
@@ -354,22 +442,20 @@ function renderKpis(data) {
   // meses distintos no filtro (para média/mês)
   const months = new Set(data.map(monthKey));
 
-  document.getElementById("kpi-count").textContent = fmtInt(data.length);
-  document.getElementById("kpi-count-hint").textContent =
+  el("kpi-count").textContent = fmtInt(data.length);
+  el("kpi-count-hint").textContent =
     data.length ? `${fmtInt(data.length)} NFs · ${months.size} ${months.size === 1 ? "mês" : "meses"} · média ${fmtNum(data.length / (months.size || 1), 1)}/mês` : "—";
 
-  document.getElementById("kpi-frete").textContent = fmtBRLcompact(freteTotal);
-  document.getElementById("kpi-frete-hint").textContent =
+  el("kpi-frete").textContent = fmtBRLcompact(freteTotal);
+  el("kpi-frete-hint").textContent =
     freteVals.length ? `${fmtInt(freteVals.length)} NFs com frete · média ${fmtBRL(ticket)}` : "Sem frete preenchido";
 
-  document.getElementById("kpi-total").textContent = fmtBRLcompact(nfTotal);
-  document.getElementById("kpi-total-hint").textContent =
+  el("kpi-total").textContent = fmtBRLcompact(nfTotal);
+  el("kpi-total-hint").textContent =
     totalVals.length ? `Soma de ${fmtInt(totalVals.length)} NFs` : "—";
 
-  const ticketEl = document.getElementById("kpi-ticket");
-  ticketEl.textContent = freteVals.length ? fmtBRLcompact(ticket) : "—";
-  document.getElementById("kpi-ticket-hint").textContent =
-    freteVals.length ? `Frete médio por nota` : "—";
+  el("kpi-ticket").textContent = freteVals.length ? fmtBRLcompact(ticket) : "—";
+  el("kpi-ticket-hint").textContent = freteVals.length ? "Frete médio por nota" : "—";
 }
 
 /* Agrupa por mês mantendo todos os meses do intervalo (inclusive vazios). */
@@ -379,7 +465,6 @@ function monthlyGroups(data, valFn) {
     const k = monthKey(r);
     (groups[k] = groups[k] || []).push(valFn(r));
   });
-  // completa lacunas entre min e max
   if (data.length) {
     const dates = data.map((r) => r.date).sort((a, b) => a - b);
     let cur = new Date(dates[0].getFullYear(), dates[0].getMonth(), 1);
@@ -393,71 +478,332 @@ function monthlyGroups(data, valFn) {
   return Object.keys(groups).sort().map((k) => ({ k, vals: groups[k] }));
 }
 
-function renderValue(data) {
+function monthSeries(data) {
   const months = monthlyGroups(data, (r) => r);
-  const freteByMonth = months.map((m) => sum(m.vals.map((r) => r.vfrete || 0)));
-  const totalByMonth = months.map((m) => sum(m.vals.map((r) => r.vtotal || 0)));
-  buildChart("chart-value", "line", {
-    type: "line",
+  return {
+    keys: months.map((m) => m.k),
+    labels: months.map((m) => monthLabel(m.k)),
+    groups: months.map((m) => m.vals),
+  };
+}
+
+/* Linhas de apoio para tooltips de séries mensais */
+function shareLine(values, i) {
+  const total = sum(values.map((v) => v || 0));
+  if (!total) return null;
+  return `${fmtPct(pct(values[i] || 0, total))} do total do filtro`;
+}
+function changeLines(values, i, fmt) {
+  const out = [];
+  const v = values[i];
+  if (v == null || !isFinite(v)) return out;
+  const prev = i > 0 ? values[i - 1] : null;
+  if (prev != null && prev !== 0) {
+    const d = ((v - prev) / Math.abs(prev)) * 100;
+    out.push(`${arrowFor(d)} ${fmtPct(d, true)} vs mês anterior`);
+  }
+  const avg = mean(values.filter((x) => x != null && isFinite(x)));
+  if (avg) {
+    const d = ((v - avg) / Math.abs(avg)) * 100;
+    out.push(`${fmtPct(d, true)} vs média mensal (${fmt(avg)})`);
+  }
+  return out;
+}
+
+/* ===================== Análises (insights) ===================== */
+function renderInsights(data) {
+  const box = el("insights-grid");
+  if (!box) return;
+  const cards = buildInsights(data);
+  box.innerHTML = cards.length
+    ? cards.map((c) =>
+      `<article class="insight insight--${c.tone}">` +
+      `<p class="insight__kicker">${escapeText(c.kicker)}</p>` +
+      `<p class="insight__value">${c.arrow ? `<span class="insight__arrow" aria-hidden="true">${c.arrow}</span>` : ""}${escapeText(c.value)}</p>` +
+      `<p class="insight__text">${escapeText(c.text)}</p>` +
+      `</article>`
+    ).join("")
+    : `<p class="insight-empty">Sem notas no filtro para gerar análises.</p>`;
+}
+
+function buildInsights(data) {
+  if (!data.length) return [];
+  const s = monthSeries(data);
+  const n = s.keys.length;
+  const rowsIn = ([a, b]) => s.groups.slice(a, b).flat();
+  const freteOf = (rows) => sum(rows.map((r) => r.vfrete || 0));
+  const ratioOf = (rows) => {
+    const both = rows.filter((r) => r.vfrete != null && r.vtotal != null && r.vtotal > 0);
+    const tot = sum(both.map((r) => r.vtotal));
+    return tot ? sum(both.map((r) => r.vfrete)) / tot : null;
+  };
+  // janela de comparação: 3 meses vs 3 anteriores; ou último mês vs anterior
+  const win = n >= 6
+    ? { cur: [n - 3, n], prev: [n - 6, n - 3], label: "Últimos 3 meses vs 3 anteriores" }
+    : n >= 2 ? { cur: [n - 1, n], prev: [n - 2, n - 1], label: "Último mês vs anterior" } : null;
+
+  const freteM = s.groups.map((g) => freteOf(g));
+  const totalFrete = freteOf(data);
+  const cards = [];
+
+  // 1. Tendência do frete
+  if (win) {
+    const cur = freteOf(rowsIn(win.cur)), prev = freteOf(rowsIn(win.prev));
+    const d = prev ? ((cur - prev) / Math.abs(prev)) * 100 : null;
+    cards.push({
+      kicker: "Tendência do frete",
+      value: fmtPct(d, true),
+      arrow: arrowFor(d),
+      tone: d == null ? "neutral" : d > 2 ? "bad" : d < -2 ? "good" : "neutral",
+      text: `${win.label}: ${fmtBRLcompact(cur)} contra ${fmtBRLcompact(prev)}.`,
+    });
+  } else {
+    cards.push({ kicker: "Tendência do frete", value: "—", tone: "neutral", text: "Precisa de pelo menos 2 meses no filtro." });
+  }
+
+  // 2. Mês de maior frete
+  const maxI = freteM.indexOf(Math.max(...freteM));
+  cards.push({
+    kicker: "Mês de maior frete",
+    value: fmtBRLcompact(freteM[maxI]),
+    tone: "neutral",
+    text: `${monthLong(s.keys[maxI])} concentra ${fmtPct(pct(freteM[maxI], totalFrete))} do frete do filtro. Média mensal: ${fmtBRLcompact(mean(freteM))}.`,
+  });
+
+  // 3. Frete sobre o valor das NFs
+  const overall = ratioOf(data);
+  if (overall != null) {
+    let value = fmtPct(overall * 100), arrow = "", tone = "neutral";
+    let text = `Frete equivale a ${fmtPct(overall * 100)} do valor total das NFs no filtro.`;
+    if (win) {
+      const cr = ratioOf(rowsIn(win.cur)), pr = ratioOf(rowsIn(win.prev));
+      if (cr != null && pr != null) {
+        const dp = (cr - pr) * 100;
+        value = fmtPct(cr * 100);
+        arrow = arrowFor(dp, 0.1);
+        tone = dp > 0.1 ? "bad" : dp < -0.1 ? "good" : "neutral";
+        text = `${win.label}: ${(dp > 0 ? "+" : "") + fmtNum(dp, 1)} p.p. (de ${fmtPct(pr * 100)} para ${fmtPct(cr * 100)} do valor das NFs).`;
+      }
+    }
+    cards.push({ kicker: "Frete sobre o valor das NFs", value, arrow, tone, text });
+  }
+
+  // 4. Custo do frete por unidade transportada (unidade dominante + demais)
+  const unitAgg = {};
+  data.forEach((r) => {
+    if (r.qty > 0 && r.vfrete != null && r.unidade !== "—") {
+      const a = (unitAgg[r.unidade] = unitAgg[r.unidade] || { f: 0, q: 0, n: 0 });
+      a.f += r.vfrete; a.q += r.qty; a.n += 1;
+    }
+  });
+  const units = Object.entries(unitAgg).sort((a, b) => b[1].f - a[1].f);
+  if (units.length) {
+    const [u, st] = units[0];
+    let tone = "neutral", arrow = "", trend = "";
+    if (win) {
+      const costIn = (range) => {
+        const rows = rowsIn(range).filter((r) => r.unidade === u && r.qty > 0 && r.vfrete != null);
+        const q = sum(rows.map((r) => r.qty));
+        return q ? freteOf(rows) / q : null;
+      };
+      const cc = costIn(win.cur), cp = costIn(win.prev);
+      if (cc != null && cp != null && cp) {
+        const d = ((cc - cp) / cp) * 100;
+        arrow = arrowFor(d);
+        tone = d > 2 ? "bad" : d < -2 ? "good" : "neutral";
+        trend = ` No recorte recente: ${fmtPct(d, true)} vs período anterior.`;
+      }
+    }
+    const others = units.slice(1).map(([ou, os]) => `${fmtBRL(os.f / os.q)} por ${ou}`);
+    cards.push({
+      kicker: "Custo do frete por unidade",
+      value: `${fmtBRL(st.f / st.q)} / ${u}`,
+      arrow, tone,
+      text: `Frete ÷ quantidade transportada (${fmtInt(st.n)} NFs com quantidade).${others.length ? " Também: " + others.join(", ") + "." : ""}${trend}`,
+    });
+  } else {
+    cards.push({ kicker: "Custo do frete por unidade", value: "—", tone: "neutral", text: "Sem quantidade e unidade preenchidas no filtro." });
+  }
+
+  // 5. Concentração do frete em produtos
+  const prodF = topProducts(data, (arr) => freteOf(arr), 999);
+  if (prodF.length) {
+    const top3 = prodF.slice(0, 3);
+    const share3 = pct(sum(top3.map((e) => e.val)), totalFrete);
+    cards.push({
+      kicker: "Concentração do frete",
+      value: fmtPct(share3),
+      tone: share3 >= 80 ? "bad" : "neutral",
+      text: `Top 3 produtos: ${top3.map((e) => `${shortName(e.p, 36)} (${fmtPct(pct(e.val, totalFrete))})`).join("; ")}.`,
+    });
+  }
+
+  // 6. Origem com maior frete
+  const origAgg = {};
+  data.forEach((r) => { origAgg[r.origem] = (origAgg[r.origem] || 0) + (r.vfrete || 0); });
+  const origEntries = Object.entries(origAgg).sort((a, b) => b[1] - a[1]);
+  if (origEntries.length) {
+    const [o1, v1] = origEntries[0];
+    const second = origEntries[1];
+    cards.push({
+      kicker: "Origem com maior frete",
+      value: fmtPct(pct(v1, totalFrete)),
+      tone: "neutral",
+      text: `${o1} responde por ${fmtBRLcompact(v1)} do frete${second ? `; ${second[0]}, por ${fmtBRLcompact(second[1])}` : ""}.`,
+    });
+  }
+
+  // 7. Meses fora do padrão (média + 2 desvios-padrão)
+  if (n >= 4) {
+    const m = mean(freteM), sd = stdev(freteM), limit = m + 2 * sd;
+    const hits = s.keys.filter((_, i) => sd > 0 && freteM[i] > limit);
+    cards.push({
+      kicker: "Meses fora do padrão",
+      value: hits.length ? `${hits.length} ${hits.length === 1 ? "mês" : "meses"}` : "Nenhum",
+      tone: hits.length ? "bad" : "good",
+      text: hits.length
+        ? `Frete acima de ${fmtBRLcompact(limit)} (média + 2 desvios): ${hits.slice(0, 3).map(monthLong).join(", ")}${hits.length > 3 ? " e outros" : ""}.`
+        : `Nenhum mês acima de ${fmtBRLcompact(limit)} (média + 2 desvios).`,
+    });
+  } else {
+    cards.push({ kicker: "Meses fora do padrão", value: "—", tone: "neutral", text: "Precisa de pelo menos 4 meses no filtro." });
+  }
+
+  // 8. Ritmo de emissão (intervalo médio entre dias com NF)
+  const distinctDays = new Set(data.map((r) => fmtDate(r.date))).size;
+  if (distinctDays > 1) {
+    const first = data[0].date, last = data[data.length - 1].date;
+    const span = Math.round((last - first) / 864e5);
+    cards.push({
+      kicker: "Intervalo entre emissões",
+      value: `${fmtNum(span / (distinctDays - 1), 1)} dias`,
+      tone: "neutral",
+      text: `${fmtInt(data.length)} NFs em ${fmtInt(distinctDays)} dias de emissão, entre ${fmtDate(first)} e ${fmtDate(last)}.`,
+    });
+  } else {
+    cards.push({ kicker: "Intervalo entre emissões", value: "—", tone: "neutral", text: `${fmtInt(data.length)} NF(s) em um único dia de emissão.` });
+  }
+
+  return cards;
+}
+
+function shortName(s, max) {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
+/* ===================== Gráficos ===================== */
+function renderFreteMonthly(data) {
+  const s = monthSeries(data);
+  const freteM = s.groups.map((g) => sum(g.map((r) => r.vfrete || 0)));
+  const avg = mean(freteM);
+  const sd = stdev(freteM);
+  const isHigh = (i) => s.keys.length >= 4 && sd > 0 && freteM[i] > avg + 2 * sd;
+  buildChart("chart-value", {
+    type: "bar",
     data: {
-      labels: months.map((m) => monthLabel(m.k)),
+      labels: s.labels,
       datasets: [
-        { label: "Valor do Frete (R$)", data: freteByMonth, yAxisID: "y",
-          borderColor: C.neutral, backgroundColor: "rgba(181,18,27,0.12)", borderWidth: 2.2, pointRadius: 2.5, tension: 0.3, fill: true },
-        { label: "Valor Total NF (R$)", data: totalByMonth, yAxisID: "y1",
-          borderColor: C.ink, backgroundColor: "rgba(60,63,68,0.06)", borderWidth: 1.8, borderDash: [5, 3], pointRadius: 1.5, tension: 0.3, fill: false },
+        { label: "Frete no mês", data: freteM, backgroundColor: C.neutral, borderRadius: 0, barPercentage: 0.72, categoryPercentage: 0.82 },
+        { label: "Média mensal", type: "line", data: s.labels.map(() => avg), borderColor: C.ink, borderWidth: 1.2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0, fill: false, order: 0 },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: true, position: "top", align: "start", labels: { color: C.text, boxWidth: 14, font: { size: 10 }, padding: 10 } },
-        tooltip: tooltipCfg({ callbacks: { label: (it) => `${it.dataset.label}: ${fmtBRL(it.parsed.y)}` } }),
+        legend: legendTop(),
+        tooltip: tip(
+          (it) => it.datasetIndex === 0 ? `Frete: ${fmtBRL(it.parsed.y)}` : `Média mensal: ${fmtBRL(it.parsed.y)}`,
+          (i) => [
+            shareLine(freteM, i),
+            ...changeLines(freteM, i, fmtBRLcompact),
+            isHigh(i) ? "Acima do padrão (média + 2 desvios)" : null,
+          ]
+        ),
       },
-      scales: {
-        x: { ticks: { color: C.text, font: { size: 8 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
-        y: { position: "left", title: { display: true, text: "Valor do Frete (R$)", color: C.neutral, font: { size: 9, weight: "bold" } },
-             ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.axis } },
-        y1: { position: "right", title: { display: true, text: "Valor Total NF (R$)", color: C.ink, font: { size: 9, weight: "bold" } },
-              ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { drawOnChartArea: false }, border: { color: C.axis } },
-      },
+      scales: { x: xCat(), y: yValue(axisMoney) },
     },
-  });
+  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
+}
+
+function renderTotalMonthly(data) {
+  const s = monthSeries(data);
+  const totalM = s.groups.map((g) => sum(g.map((r) => r.vtotal || 0)));
+  buildChart("chart-total", {
+    type: "bar",
+    data: {
+      labels: s.labels,
+      datasets: [{ label: "Valor total das NFs", data: totalM, backgroundColor: C.ink, borderRadius: 0, barPercentage: 0.72, categoryPercentage: 0.82 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: tip(
+          (it) => `Valor total das NFs: ${fmtBRL(it.parsed.y)}`,
+          (i) => [shareLine(totalM, i), ...changeLines(totalM, i, fmtBRLcompact)]
+        ),
+      },
+      scales: { x: xCat(), y: yValue(axisMoney) },
+    },
+  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
 }
 
 function renderCount(data) {
-  const months = monthlyGroups(data, (r) => r);
-  buildChart("chart-count", "bar", {
+  const s = monthSeries(data);
+  const counts = s.groups.map((g) => g.length);
+  buildChart("chart-count", {
     type: "bar",
     data: {
-      labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Nº de NFs", data: months.map((m) => m.vals.length), backgroundColor: C.ink, borderRadius: 0 }],
+      labels: s.labels,
+      datasets: [{ label: "Nº de NFs", data: counts, backgroundColor: C.ink, borderRadius: 0, barPercentage: 0.72, categoryPercentage: 0.82 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, barTopLabels: { formatter: (v) => fmtInt(v) }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtInt(it.parsed.y)} NFs` } }) },
-      scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
-                y: scaleY("Nº de NFs") },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: tip(
+          (it) => `${fmtInt(it.parsed.y)} NFs`,
+          (i) => [shareLine(counts, i), ...changeLines(counts, i, fmtInt)]
+        ),
+      },
+      scales: { x: xCat(), y: yValue(fmtInt) },
     },
-  });
+  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
 }
 
 function renderQty(data) {
-  const months = monthlyGroups(data, (r) => r);
-  buildChart("chart-qty", "bar", {
+  const s = monthSeries(data);
+  const qty = s.groups.map((g) => sum(g.map((r) => r.qty || 0)));
+  const unitsM = s.groups.map((g) => {
+    const m = {};
+    g.forEach((r) => { if (r.qty) m[r.unidade] = (m[r.unidade] || 0) + r.qty; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  });
+  buildChart("chart-qty", {
     type: "bar",
     data: {
-      labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Quantidade", data: months.map((m) => sum(m.vals.map((r) => r.qty || 0))), backgroundColor: "#8A8F96", borderRadius: 0 }],
+      labels: s.labels,
+      datasets: [{ label: "Quantidade", data: qty, backgroundColor: "#8A8F96", borderRadius: 0, barPercentage: 0.72, categoryPercentage: 0.82 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtNum(it.parsed.y, 0)} unidades (KG·PC·M)` } }) },
-      scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
-                y: { ...scaleY("Qtde (unidades)"), ticks: { color: C.text, font: { size: 10 }, callback: (v) => fmtQtyCompact(v) } } },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: tip(
+          (it) => `${fmtNum(it.parsed.y, 0)} unidades somadas`,
+          (i) => [
+            ...unitsM[i].map(([u, v]) => `${u}: ${fmtNum(v, 0)}`),
+            ...changeLines(qty, i, fmtQtyCompact),
+          ]
+        ),
+      },
+      scales: { x: xCat(), y: yValue(axisQty) },
     },
-  });
+  }, { pick: (i) => toggleMonth(s.keys[i]), dim: true });
 }
 
 function topProducts(data, metricFn, limit) {
@@ -469,48 +815,62 @@ function topProducts(data, metricFn, limit) {
     .slice(0, limit);
 }
 
-function productGroups(data, predicate = () => true) {
-  const groups = {};
-  data.filter(predicate).forEach((r) => {
-    (groups[r.produto] = groups[r.produto] || []).push(r);
-  });
-  return Object.entries(groups)
-    .map(([p, arr]) => ({ p, arr }))
-    .sort((a, b) => a.p.localeCompare(b.p, "pt-BR"));
-}
-
 function renderFreteByProduct(data) {
-  const entries = topProducts(data, (arr) => sum(arr.map((r) => r.vfrete || 0)), 12);
-  buildChart("chart-frete-prod", "bar", {
+  const entries = topProducts(data, (arr) => sum(arr.map((r) => r.vfrete || 0)), 10);
+  const totalFrete = sum(data.map((r) => r.vfrete || 0));
+  buildChart("chart-frete-prod", {
     type: "bar",
     data: {
       labels: entries.map((e) => e.p),
-      datasets: [{ label: "Frete (R$)", data: entries.map((e) => e.val), backgroundColor: C.neutral, borderRadius: 0 }],
+      datasets: [{ label: "Frete (R$)", data: entries.map((e) => e.val), backgroundColor: C.neutral, borderRadius: 0, barPercentage: 0.7 }],
     },
     options: {
       indexAxis: "y", responsive: true, maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtBRL(it.parsed.x)} · ${fmtInt(entries[it.dataIndex].n)} NFs` } }) },
-      scales: { x: scaleY("Valor do frete (R$)", true), y: { ...scaleTicks(), grid: { display: false } } },
+      interaction: { mode: "nearest", axis: "y", intersect: false },
+      layout: { padding: { right: 78 } },
+      plugins: {
+        legend: { display: false },
+        valueLabels: { formatter: (v) => fmtBRLcompact(v) },
+        tooltip: tip(
+          (it) => `Frete: ${fmtBRL(it.parsed.x)}`,
+          (i) => [
+            `${fmtPct(pct(entries[i].val, totalFrete))} do frete do filtro`,
+            `${fmtInt(entries[i].n)} NFs · frete médio ${fmtBRL(entries[i].n ? entries[i].val / entries[i].n : 0)}`,
+          ]
+        ),
+      },
+      scales: { x: yValue(axisMoney), y: yCategory() },
     },
-  });
+  }, { pick: (i) => toggleSelect("filter-product", entries[i].p), dim: true });
 }
 
 function renderCountByProduct(data) {
-  const entries = topProducts(data, (arr) => arr.length, 12);
-  buildChart("chart-count-prod", "bar", {
+  const entries = topProducts(data, (arr) => arr.length, 10);
+  const totalN = data.length;
+  buildChart("chart-count-prod", {
     type: "bar",
     data: {
       labels: entries.map((e) => e.p),
-      datasets: [{ label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 0 }],
+      datasets: [{ label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 0, barPercentage: 0.7 }],
     },
     options: {
       indexAxis: "y", responsive: true, maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtInt(it.parsed.x)} NFs · ${fmtBRL(entries[it.dataIndex].val || 0)} de frete` } }) },
-      scales: { x: scaleY("Nº de NFs"), y: { ...scaleTicks(), grid: { display: false } } },
+      interaction: { mode: "nearest", axis: "y", intersect: false },
+      layout: { padding: { right: 40 } },
+      plugins: {
+        legend: { display: false },
+        valueLabels: { formatter: (v) => fmtInt(v) },
+        tooltip: tip(
+          (it) => `${fmtInt(it.parsed.x)} NFs`,
+          (i) => [
+            `${fmtPct(pct(entries[i].n, totalN))} das NFs do filtro`,
+            `Frete: ${fmtBRL(entries[i].val || 0)}`,
+          ]
+        ),
+      },
+      scales: { x: yValue(fmtInt), y: yCategory() },
     },
-  });
+  }, { pick: (i) => toggleSelect("filter-product", entries[i].p), dim: true });
 }
 
 function renderOrigin(data) {
@@ -518,62 +878,85 @@ function renderOrigin(data) {
   data.forEach((r) => { (groups[r.origem] = groups[r.origem] || []).push(r); });
   const entries = Object.entries(groups).map(([o, arr]) => ({
     o, n: arr.length, frete: sum(arr.map((r) => r.vfrete || 0)),
-  })).sort((a, b) => b.frete - a.frete);
+  })).sort((a, b) => b.frete - a.frete || b.n - a.n);
+  const totalF = sum(entries.map((e) => e.frete));
+  const totalN = sum(entries.map((e) => e.n));
+  const shareF = entries.map((e) => pct(e.frete, totalF));
+  const shareN = entries.map((e) => pct(e.n, totalN));
 
-  buildChart("chart-origin", "bar", {
+  buildChart("chart-origin", {
     type: "bar",
     data: {
       labels: entries.map((e) => e.o),
       datasets: [
-        { label: "Frete (R$)", data: entries.map((e) => e.frete), backgroundColor: C.neutral, borderRadius: 0, yAxisID: "y" },
-        { label: "Nº de NFs", data: entries.map((e) => e.n), backgroundColor: C.ink, borderRadius: 0, yAxisID: "y1" },
+        { label: "% do frete", data: shareF, backgroundColor: C.neutral, borderRadius: 0, barPercentage: 0.6, categoryPercentage: 0.7 },
+        { label: "% das NFs", data: shareN, backgroundColor: C.ink, borderRadius: 0, barPercentage: 0.6, categoryPercentage: 0.7 },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: true, position: "top", align: "start", labels: { color: C.text, boxWidth: 12, font: { size: 10 }, padding: 10 } },
-        tooltip: tooltipCfg({ callbacks: { label: (it) => it.datasetIndex === 0 ? `Frete: ${fmtBRL(it.parsed.y)}` : `NFs: ${fmtInt(it.parsed.y)}` } }),
+        legend: legendTop(),
+        valueLabels: { formatter: (v) => fmtPct(v) },
+        tooltip: tip(
+          (it) => it.datasetIndex === 0
+            ? `Frete: ${fmtBRL(entries[it.dataIndex].frete)} (${fmtPct(shareF[it.dataIndex])})`
+            : `NFs: ${fmtInt(entries[it.dataIndex].n)} (${fmtPct(shareN[it.dataIndex])})`,
+          (i) => [`Frete médio por NF: ${fmtBRL(entries[i].n ? entries[i].frete / entries[i].n : 0)}`]
+        ),
       },
       scales: {
-        x: scaleTicks(),
-        y: { position: "left", title: { display: true, text: "Frete (R$)", color: C.neutral, font: { size: 9, weight: "bold" } }, ticks: { color: C.text, font: { size: 8 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.axis } },
-        y1: { position: "right", title: { display: true, text: "Nº de NFs", color: C.ink, font: { size: 9, weight: "bold" } }, ticks: { color: C.text, font: { size: 8 } }, grid: { drawOnChartArea: false }, border: { color: C.axis } },
+        x: xCat(0),
+        y: {
+          beginAtZero: true, max: 115,
+          ticks: { color: C.text, font: { size: 10 }, stepSize: 25, callback: (v) => (v > 100 ? "" : v + "%") },
+          grid: { color: C.grid }, border: { display: false },
+        },
       },
     },
-  });
+  }, { pick: (i) => toggleSelect("filter-origin", entries[i].o), dim: true });
 }
 
 function renderTicket(data) {
-  const months = monthlyGroups(data, (r) => r);
-  const ticketByMonth = months.map((m) => {
-    const fr = m.vals.map((r) => r.vfrete).filter((v) => v != null);
+  const s = monthSeries(data);
+  const ticket = s.groups.map((g) => {
+    const fr = g.map((r) => r.vfrete).filter((v) => v != null);
     return fr.length ? sum(fr) / fr.length : null;
   });
-  buildChart("chart-ticket", "line", {
+  const withFrete = data.filter((r) => r.vfrete != null);
+  const avgAll = withFrete.length ? sum(withFrete.map((r) => r.vfrete)) / withFrete.length : 0;
+  buildChart("chart-ticket", {
     type: "line",
     data: {
-      labels: months.map((m) => monthLabel(m.k)),
-      datasets: [{ label: "Frete médio/NF (R$)", data: ticketByMonth, borderColor: C.neutral, backgroundColor: "rgba(181,18,27,0.10)", borderWidth: 2, pointRadius: 2.5, tension: 0.3, fill: true, spanGaps: true }],
+      labels: s.labels,
+      datasets: [
+        { label: "Frete médio por NF", data: ticket, borderColor: C.neutral, backgroundColor: "rgba(226,6,19,0.08)", borderWidth: 2, pointRadius: 2.5, pointHoverRadius: 5, tension: 0.25, fill: true, spanGaps: true },
+        { label: "Média do período", data: s.labels.map(() => avgAll), borderColor: C.ink, borderWidth: 1.2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0, fill: false, spanGaps: true },
+      ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
-      plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => it.parsed.y == null ? "Sem frete no mês" : `${fmtBRL(it.parsed.y)} por NF` } }) },
-      scales: { x: { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
-                y: scaleY("Frete médio/NF (R$)", true) },
+      plugins: {
+        legend: legendTop(),
+        tooltip: tip(
+          (it) => it.datasetIndex === 1 ? `Média do período: ${fmtBRL(avgAll)}`
+            : (it.parsed.y == null || !isFinite(it.parsed.y)) ? "Sem frete no mês" : `${fmtBRL(it.parsed.y)} por NF`,
+          (i) => (ticket[i] == null ? [] : changeLines(ticket, i, fmtBRL))
+        ),
+      },
+      scales: { x: xCat(), y: yValue(axisMoney) },
     },
-  });
+  }, { pick: (i) => toggleMonth(s.keys[i]) });
 }
 
 function renderProductSeries(data) {
-  const container = document.getElementById("extra-charts");
+  const container = el("extra-charts");
   if (!container) return;
   container.innerHTML = "";
   // top 6 produtos por frete -> um card de evolução mensal cada
   const tops = topProducts(data, (arr) => sum(arr.map((r) => r.vfrete || 0)), 6);
-  // colunas sem linha órfã: 6 cards = 3x2; até 4 cards numa linha; 5 cards numa linha só em telas largas
   const n = tops.length;
   const wide = window.innerWidth >= 1500;
   const cols = n <= 4 ? Math.max(n, 1) : n === 5 ? (wide ? 5 : 3) : 3;
@@ -581,7 +964,8 @@ function renderProductSeries(data) {
   tops.forEach((entry, i) => {
     const color = PRODUCT_COLORS[i % PRODUCT_COLORS.length];
     const subset = data.filter((r) => r.produto === entry.p);
-    const months = monthlyGroups(subset, (r) => r);
+    const s = monthSeries(subset);
+    const freteM = s.groups.map((g) => sum(g.map((r) => r.vfrete || 0)));
     const card = document.createElement("div");
     card.className = "extra-card";
     const id = "extra-" + i;
@@ -589,27 +973,34 @@ function renderProductSeries(data) {
       `<p class="extra-card__title"><span class="extra-card__swatch" style="background:${color}"></span>${escapeText(entry.p)}</p>` +
       `<div class="extra-card__canvas"><canvas id="${id}"></canvas></div>`;
     container.appendChild(card);
-    if (!months.length) return;
-    buildChart(id, "line", {
+    if (!s.keys.length) return;
+    buildChart(id, {
       type: "line",
       data: {
-        labels: months.map((m) => monthLabel(m.k)),
-        datasets: [{ data: months.map((m) => sum(m.vals.map((r) => r.vfrete || 0))), borderColor: color, backgroundColor: color + "22", borderWidth: 1.8, pointRadius: 1.5, tension: 0.3, fill: true }],
+        labels: s.labels,
+        datasets: [{ data: freteM, borderColor: color, backgroundColor: color + "22", borderWidth: 1.8, pointRadius: 1.5, pointHoverRadius: 4, tension: 0.25, fill: true }],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: (it) => `${fmtBRL(it.parsed.y)} de frete` } }) },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: tip(
+            (it) => `${fmtBRL(it.parsed.y)} de frete`,
+            (idx) => changeLines(freteM, idx, fmtBRLcompact)
+          ),
+        },
         scales: {
-          x: { ticks: { color: C.text, font: { size: 7 }, maxTicksLimit: 6, autoSkip: true }, grid: { display: false }, border: { color: C.axis } },
-          y: { ticks: { color: C.text, font: { size: 10 }, callback: (v) => fmtBRLcompact(v) }, grid: { color: C.grid }, border: { color: C.axis }, title: { display: true, text: "Frete (R$)", color: C.text, font: { size: 8 } } },
+          x: { ticks: { color: C.text, font: { size: 9 }, maxTicksLimit: 6, autoSkip: true, maxRotation: 0 }, grid: { display: false }, border: { color: C.axis } },
+          y: yValue(axisMoney, 4),
         },
       },
-    });
+    }, { pick: (idx) => toggleMonth(s.keys[idx]) });
   });
 }
 
 function renderBlastbags(data) {
-  const section = document.getElementById("blastbags-section");
+  const section = el("blastbags-section");
   if (!section) return;
 
   const subset = data.filter((r) => norm(r.produto).includes(BLASTBAG_TOKEN));
@@ -619,7 +1010,7 @@ function renderBlastbags(data) {
   }
 
   section.hidden = false;
-  const meta = document.getElementById("blastbags-meta");
+  const meta = el("blastbags-meta");
   const dates = subset.map((r) => r.date).sort((a, b) => a - b);
   const products = [...new Set(subset.map((r) => r.produto))];
   if (meta && dates.length) {
@@ -691,8 +1082,18 @@ function renderBlastbags(data) {
   });
 }
 
+function productGroups(data, predicate = () => true) {
+  const groups = {};
+  data.filter(predicate).forEach((r) => {
+    (groups[r.produto] = groups[r.produto] || []).push(r);
+  });
+  return Object.entries(groups)
+    .map(([p, arr]) => ({ p, arr }))
+    .sort((a, b) => a.p.localeCompare(b.p, "pt-BR"));
+}
+
 function renderBlastbagKpis(subset, entries) {
-  const box = document.getElementById("blastbag-kpis");
+  const box = el("blastbag-kpis");
   if (!box) return;
   const totalQty = sum(entries.map((e) => e.qty));
   const totalProducts = sum(entries.map((e) => e.vprod));
@@ -718,7 +1119,7 @@ function renderBlastbagBar(canvasId, entries, cfg) {
     .map((entry) => ({ ...entry, chartValue: cfg.value(entry) || 0 }))
     .sort((a, b) => b.chartValue - a.chartValue);
   const total = sum(ranked.map((e) => e.chartValue));
-  buildChart(canvasId, "bar", {
+  buildChart(canvasId, {
     type: "bar",
     data: {
       labels: ranked.map((e) => e.p),
@@ -738,7 +1139,7 @@ function renderBlastbagBar(canvasId, entries, cfg) {
       indexAxis: "y",
       responsive: true,
       maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
+      interaction: { mode: "nearest", axis: "y", intersect: false },
       layout: { padding: { right: 24 } },
       plugins: {
         legend: { display: false },
@@ -746,32 +1147,31 @@ function renderBlastbagBar(canvasId, entries, cfg) {
           formatter: (value, dataIndex) => cfg.valueLabel(value, ranked[dataIndex], total),
           color: cfg.color,
         },
-        tooltip: tooltipCfg({
-          callbacks: {
-            label: (it) => cfg.tooltip(it.parsed.x, ranked[it.dataIndex], total),
-          },
-        }),
+        tooltip: tip(
+          (it) => cfg.tooltip(it.parsed.x, ranked[it.dataIndex], total),
+          null
+        ),
       },
       scales: {
         x: {
-          ...scaleY(cfg.axisTitle, cfg.compactAxis),
+          ...yValue(cfg.compactAxis ? axisMoney : fmtInt),
           suggestedMax: Math.max(...ranked.map((e) => e.chartValue), 0) * 1.15,
         },
         y: {
-          ...scaleTicks(),
           grid: { display: false },
+          border: { display: false },
           ticks: {
-            color: C.text,
-            font: { size: 8 },
+            color: C.ink,
+            font: { size: 10 },
             autoSkip: false,
-            callback: (_value, index) => {
-              const label = ranked[index] ? ranked[index].p : "";
-              return label.length > 24 ? label.slice(0, 24) + "…" : label;
-            },
+            callback: (_value, index) => shortName(ranked[index] ? ranked[index].p : "", 30),
           },
         },
       },
     },
+  }, {
+    pick: (i) => toggleSelect("filter-product", ranked[i].p),
+    dim: true,
   });
 }
 
@@ -833,7 +1233,7 @@ function renderTable(data) {
   const start = (STATE.page - 1) * PAGE_SIZE;
   const pageRows = rows.slice(start, start + PAGE_SIZE);
 
-  const tbody = document.getElementById("nf-tbody");
+  const tbody = el("nf-tbody");
   tbody.innerHTML = pageRows.map((r) =>
     `<tr>` +
     `<td>${fmtDate(r.date)}</td>` +
@@ -846,14 +1246,14 @@ function renderTable(data) {
     `</tr>`
   ).join("") || `<tr><td colspan="7" style="text-align:center;color:#9aa1a7;padding:24px">Nenhuma nota no filtro.</td></tr>`;
 
-  document.getElementById("table-info").textContent =
+  el("table-info").textContent =
     rows.length ? `Mostrando ${start + 1}–${Math.min(start + PAGE_SIZE, rows.length)} de ${fmtInt(rows.length)} notas` : "Nenhuma nota";
 
   renderPager(totalPages);
 }
 
 function renderPager(totalPages) {
-  const pager = document.getElementById("pager");
+  const pager = el("pager");
   const p = STATE.page;
   const btn = (label, page, opts = {}) =>
     `<button type="button" class="${opts.active ? "is-active" : ""}" ${opts.disabled ? "disabled" : `data-page="${page}"`}>${label}</button>`;
@@ -876,35 +1276,131 @@ function renderPager(totalPages) {
   });
 }
 
-/* ===================== Helpers de chart ===================== */
-function buildChart(canvasId, _kind, config) {
-  if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return;
-  if (!config.type) {
-    const ds = config.data && config.data.datasets && config.data.datasets[0];
-    config.type = (ds && ds.type) || _kind || "bar";
-  }
-  CHARTS[canvasId] = new Chart(ctx, config);
+/* ===================== Helpers de gráfico ===================== */
+function withAlpha(color, a) {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/* Esmaece as barras não selecionadas ao passar o mouse (apenas datasets de barra com cor fixa) */
+function applyDim(chart, idx) {
+  if (chart._dimIdx === idx) return;
+  chart._dimIdx = idx;
+  chart.data.datasets.forEach((ds) => {
+    if (ds.type && ds.type !== "bar") return;
+    if (typeof ds._base !== "string") return;
+    ds.backgroundColor = ds.data.map((_, i) => (idx == null || i === idx ? ds._base : withAlpha(ds._base, 0.28)));
+  });
+  chart.update("none");
+}
+
+/**
+ * Cria o gráfico com interações:
+ *  - hover: cursor pointer quando há ação de clique; barras não focadas são esmaecidas
+ *  - clique: opts.pick(índice) aplica o filtro do painel
+ */
+function buildChart(canvasId, config, opts = {}) {
+  if (CHARTS[canvasId]) { CHARTS[canvasId].destroy(); delete CHARTS[canvasId]; }
+  const canvas = el(canvasId);
+  if (!canvas || !window.Chart) return;
+
+  config.data.datasets.forEach((ds) => {
+    if (typeof ds.backgroundColor === "string") ds._base = ds.backgroundColor;
+  });
+
+  const options = config.options || (config.options = {});
+  options.onHover = (evt, els, chart) => {
+    const hit = !!(els && els.length);
+    canvas.style.cursor = hit && opts.pick ? "pointer" : "default";
+    if (opts.dim) applyDim(chart, hit ? els[0].index : null);
+  };
+  options.onClick = (evt, els) => {
+    if (!opts.pick || !els || !els.length) return;
+    // adia: destruir o gráfico dentro do próprio evento do Chart.js quebra a animação
+    const idx = els[0].index;
+    setTimeout(() => opts.pick(idx), 0);
+  };
+  CHARTS[canvasId] = new Chart(canvas, config);
 }
 
 function tooltipCfg(extra) { return Object.assign({}, tooltipBase(), extra || {}); }
 function tooltipBase() {
   return {
-    enabled: true, backgroundColor: "rgba(60,63,68,0.95)", titleColor: "#ffffff", bodyColor: "#e8e8e8",
-    borderColor: "#3C3F44", borderWidth: 0, padding: 12, cornerRadius: 4, caretSize: 8, caretPadding: 8,
-    displayColors: true, boxWidth: 10, boxHeight: 10, boxPadding: 4,
-    titleFont: { weight: "700", size: 12 }, bodyFont: { size: 11 }, bodySpacing: 5,
+    enabled: true, backgroundColor: "rgba(56,66,75,0.96)", titleColor: "#ffffff", bodyColor: "#e8e8e8",
+    borderColor: "#38424B", borderWidth: 0, padding: 10, cornerRadius: 2, caretSize: 6, caretPadding: 8,
+    displayColors: true, boxWidth: 8, boxHeight: 8, boxPadding: 4,
+    titleFont: { weight: "700", size: 12 }, bodyFont: { size: 11 }, bodySpacing: 4, footerFont: { size: 10 },
   };
 }
-function scaleTicks() { return { ticks: { color: C.text, font: { size: 10 }, maxRotation: 45, autoSkip: true }, border: { color: C.axis } }; }
-function scaleY(title, compact) {
+/** Tooltip com linha principal + linhas de apoio (participação, comparação) */
+function tip(labelFn, extraFn) {
+  return tooltipCfg({
+    callbacks: {
+      label: (it) => labelFn(it),
+      afterBody: (items) => {
+        if (!extraFn || !items.length) return [];
+        return (extraFn(items[0].dataIndex) || []).filter(Boolean);
+      },
+    },
+  });
+}
+function legendTop() {
+  return { display: true, position: "top", align: "start", labels: { color: C.text, boxWidth: 10, boxHeight: 10, font: { size: 10 }, padding: 14 } };
+}
+function xCat(rotation = 45) {
   return {
-    title: { display: !!title, text: title, color: C.text, font: { size: 8, weight: "bold" } },
-    ticks: { color: C.text, font: { size: 10 }, callback: compact ? (v) => fmtBRLcompact(v) : undefined },
-    grid: { color: C.grid }, border: { color: C.axis },
+    ticks: { color: C.text, font: { size: 10 }, maxRotation: rotation, autoSkip: true, autoSkipPadding: 8 },
+    grid: { display: false }, border: { color: C.axis },
   };
 }
+function yCategory() {
+  return {
+    grid: { display: false }, border: { display: false },
+    ticks: {
+      color: C.ink, font: { size: 10 }, autoSkip: false,
+      callback: function (v) { return shortName(String(this.getLabelForValue(v)), 30); },
+    },
+  };
+}
+function yValue(fmt, maxTicks) {
+  return {
+    beginAtZero: true,
+    ticks: { color: C.text, font: { size: 10 }, maxTicksLimit: maxTicks || 7, callback: (v) => fmt(v) },
+    grid: { color: C.grid }, border: { display: false },
+  };
+}
+
+/* Rótulos de valor: no fim das barras horizontais, acima das verticais */
+const valueLabelsPlugin = {
+  id: "valueLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || !opts.formatter) return;
+    const { ctx } = chart;
+    const horizontal = chart.options.indexAxis === "y";
+    ctx.save();
+    ctx.font = "600 10px " + Chart.defaults.font.family;
+    ctx.fillStyle = C.ink;
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden || (ds.type && ds.type !== "bar")) return;
+      meta.data.forEach((bar, i) => {
+        const v = ds.data[i];
+        if (v == null || !isFinite(v)) return;
+        const label = opts.formatter(v, i, di);
+        if (horizontal) {
+          ctx.textAlign = "left"; ctx.textBaseline = "middle";
+          ctx.fillText(label, bar.x + 6, bar.y);
+        } else {
+          ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+          ctx.fillText(label, bar.x, bar.y - 4);
+        }
+      });
+    });
+    ctx.restore();
+  },
+};
 
 const blastbagValueLabelsPlugin = {
   id: "blastbagValueLabels",
@@ -920,7 +1416,7 @@ const blastbagValueLabelsPlugin = {
     meta.data.forEach((bar, i) => {
       const value = dataset.data[i];
       if (value == null) return;
-      const label = opts.formatter ? opts.formatter(value, i) : fmtNum(value, 0);
+      const label = opts.formatter(value, i);
       const barWidth = bar.width || 0;
       const textWidth = ctx.measureText(label).width;
       if (barWidth < 44) return;
@@ -940,37 +1436,14 @@ const blastbagValueLabelsPlugin = {
   },
 };
 
-// Rótulo de valor acima de cada barra vertical (ativado por plugins.barTopLabels)
-const barTopLabelsPlugin = {
-  id: "barTopLabels",
-  afterDatasetsDraw(chart, _args, opts) {
-    if (!opts || !opts.formatter) return;
-    const meta = chart.getDatasetMeta(0);
-    const dataset = chart.data.datasets[0];
-    if (!meta || meta.hidden || !dataset) return;
-    const { ctx } = chart;
-    ctx.save();
-    ctx.font = "600 9px " + Chart.defaults.font.family;
-    ctx.fillStyle = opts.color || C.ink;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    meta.data.forEach((bar, i) => {
-      const value = dataset.data[i];
-      if (value == null) return;
-      ctx.fillText(opts.formatter(value, i), bar.x, bar.y - 3);
-    });
-    ctx.restore();
-  },
-};
-
 function setStatus(kind, text) {
-  const el = document.getElementById("status");
-  if (!el) return;
-  el.classList.remove("is-loading", "is-ok", "is-error");
-  if (kind === "loading") el.classList.add("is-loading");
-  if (kind === "ok") el.classList.add("is-ok");
-  if (kind === "error") el.classList.add("is-error");
-  const t = document.getElementById("status-text");
+  const node = el("status");
+  if (!node) return;
+  node.classList.remove("is-loading", "is-ok", "is-error");
+  if (kind === "loading") node.classList.add("is-loading");
+  if (kind === "ok") node.classList.add("is-ok");
+  if (kind === "error") node.classList.add("is-error");
+  const t = el("status-text");
   if (t) t.textContent = text;
 }
 function nowBR() { return new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
@@ -1024,11 +1497,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
   Chart.defaults.font.family = "'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif";
-  Chart.defaults.font.size = 8;
+  Chart.defaults.font.size = 10;
   Chart.defaults.color = "#8A8F96";
   Chart.defaults.borderColor = "#D5D8DC";
+  Chart.defaults.animation = { duration: 300 };
   Object.assign(Chart.defaults.plugins.tooltip, tooltipBase());
-  Chart.register(blastbagValueLabelsPlugin, barTopLabelsPlugin);
+  Chart.register(blastbagValueLabelsPlugin, valueLabelsPlugin);
 
   // ordenação ao clicar no cabeçalho
   document.querySelectorAll(".nf-table thead th").forEach((th) => {
@@ -1041,7 +1515,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   });
   // busca
-  const search = document.getElementById("table-search");
+  const search = el("table-search");
   let t;
   search.oninput = () => {
     clearTimeout(t);

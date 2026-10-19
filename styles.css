@@ -411,8 +411,75 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
-.chart-block__body { position: relative; height: clamp(230px, 17vw, 320px); min-height: 220px; }
-.chart-block__body--tall { height: clamp(280px, 22vw, 400px); min-height: 300px; }
+/* Altura única para todos os gráficos (grade balanceada) */
+.chart-block__body { position: relative; height: clamp(260px, 20vw, 330px); min-height: 240px; }
+.chart-block__body--tall { height: clamp(260px, 20vw, 330px); min-height: 240px; }
+
+/* ---------- Análises (cartões de leitura automática) ---------- */
+.insights {
+  margin: 0 0 48px;
+  padding-top: 28px;
+  border-top: 1px solid var(--rule);
+}
+.insights__head { margin-bottom: 20px; }
+.insights__head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.insights__head p:not(.kicker) {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.insights__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26px 32px;
+}
+.insight {
+  min-width: 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--faint);
+}
+.insight--good { border-left-color: var(--green); }
+.insight--bad { border-left-color: var(--red); }
+.insight--neutral { border-left-color: var(--ink); }
+.insight__kicker {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.insight__value {
+  margin: 0 0 6px;
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.insight__arrow { display: inline-block; margin-right: 6px; font-size: 13px; vertical-align: 3px; color: var(--ink); }
+.insight--good .insight__arrow { color: var(--green); }
+.insight--bad .insight__arrow { color: var(--red); }
+.insight__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.insight-empty { margin: 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 1100px) {
+  .insights__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .insights__grid { grid-template-columns: 1fr; gap: 20px; }
+  .insight__value { font-size: 20px; }
+}
 .chart-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
